@@ -18,9 +18,9 @@ def home():
 # ==============================================================================
 # 1. CONFIGURATION
 # ==============================================================================
-TELEGRAM_BOT_TOKEN = "8936868424:AAGqM-6JK_o_VXmw6J3iqkjQUTEsyDsEDNU"
-TELEGRAM_CHAT_ID = "8128112023"
-TWELVE_DATA_API_KEY = "6e0554aaea51417286772ac9949303b4"
+TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
+TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID")
+TWELVE_DATA_API_KEY = os.environ.get("TWELVE_DATA_API_KEY")
 
 # Assets to scan daily for signals
 SYMBOLS = ["XAU/USD", "EUR/USD", "GBP/USD", "USD/JPY"]
@@ -145,6 +145,7 @@ def analyze_market(symbol):
 # ==============================================================================
 def run_trading_bot():
     print("🚀 Public AI Engine Started... Scanning Market...")
+    send_telegram("✅ Bot is live and scanning 24/7 for signals.")
     while True:
         try:
             for symbol in SYMBOLS:
@@ -158,10 +159,13 @@ def run_trading_bot():
 # ==============================================================================
 # 6. APPLICATION ENTRY POINT
 # ==============================================================================
-if __name__ == "__main__":
-    # Start the market scanner loop on a background thread
-    threading.Thread(target=run_trading_bot, daemon=True).start()
+# Start the market scanner loop on a background thread.
+# This runs the moment the module is imported, so it works whether the app
+# is launched via `python bot.py` OR via gunicorn (gunicorn bot:app), which
+# never executes the __main__ block below.
+threading.Thread(target=run_trading_bot, daemon=True).start()
 
-    # Start the Flask web server for Render
+if __name__ == "__main__":
+    # Start the Flask web server (only used for local/dev runs — Render uses gunicorn)
     port = int(os.environ.get("PORT", 10000))
     app.run(host="0.0.0.0", port=port)
