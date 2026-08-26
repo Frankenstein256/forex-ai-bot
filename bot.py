@@ -39,7 +39,8 @@ def send_telegram(message):
     url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
     payload = {"chat_id": TELEGRAM_CHAT_ID, "text": message, "parse_mode": "Markdown"}
     try:
-        requests.post(url, json=payload)
+        response = requests.post(url, json=payload)
+        print(f"Telegram response: {response.status_code} - {response.text}")
     except Exception as e:
         print(f"Error sending Telegram alert: {e}")
 
@@ -169,3 +170,4 @@ if __name__ == "__main__":
     # Start the Flask web server (only used for local/dev runs — Render uses gunicorn)
     port = int(os.environ.get("PORT", 10000))
     app.run(host="0.0.0.0", port=port)
+        
