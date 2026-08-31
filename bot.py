@@ -23,16 +23,19 @@ TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
 TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID")
 TWELVE_DATA_API_KEY = os.environ.get("TWELVE_DATA_API_KEY")
 
-SYMBOLS = ["XAU/USD", "EUR/USD", "GBP/USD", "USD/JPY"]
+SYMBOLS = ["XAU/USD", "EUR/USD", "GBP/USD", "USD/JPY", "USD/CAD", "AUD/USD", "NZD/USD", "GBP/JPY"]
 
 # How often (seconds) each timeframe is allowed to refresh from the API.
-REFRESH = {"1day": 6 * 3600, "4h": 3600, "15min": 300}
+# Tuned to match each timeframe's actual candle-close cadence — no point
+# re-fetching a 4H candle every 5 minutes. Keeps 8 symbols well under
+# TwelveData's free-tier 800 calls/day limit (~650/day at these settings).
+REFRESH = {"1day": 8 * 3600, "4h": 4 * 3600, "15min": 20 * 60}
 
 cache = {s: {} for s in SYMBOLS}
 
 # Cooldown per exact setup (zone or trendline level) so the same level
 # doesn't spam repeatedly — but no cap on how many *different* setups fire.
-SETUP_COOLDOWN_SECONDS = 4 * 3600
+SETUP_COOLDOWN_SECONDS = 90 * 60  # 1.5 hours
 last_setup_signaled = {}  # key -> last signal time
 
 # ==============================================================================
@@ -93,7 +96,7 @@ def get_daily_bias(df):
 # ==============================================================================
 # 5. 4H SUPPLY/DEMAND ZONE DETECTION
 # ==============================================================================
-def find_zones(df, bias, lookback=40, swing_window=3):
+def find_zones(df, bias, lookback=50, swing_window=2):
     df = df.tail(lookback).reset_index(drop=True)
     best_zone = None
     best_move = 0
@@ -121,7 +124,7 @@ def find_zones(df, bias, lookback=40, swing_window=3):
 # ==============================================================================
 # 6. TORI-STYLE TRENDLINE DETECTION (ACTION LINE)
 # ==============================================================================
-def find_trendline(df, bias, lookback=60, swing_window=3):
+def find_trendline(df, bias, lookback=70, swing_window=2):
     """
     Fits an ascending support line (bullish) through recent swing lows,
     or a descending resistance line (bearish) through recent swing highs.
@@ -291,3 +294,4 @@ threading.Thread(target=run_trading_bot, daemon=True).start()
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
     app.run(host="0.0.0.0", port=port)
+    
