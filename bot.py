@@ -1,5 +1,6 @@
 import os
 import time
+import asyncio
 import logging
 import requests
 from telegram import Bot
@@ -14,7 +15,7 @@ TWELVEDATA_API_KEY = os.getenv("TWELVEDATA_API_KEY")
 
 bot = Bot(token=TELEGRAM_BOT_TOKEN)
 
-SYMBOLS = ["USD/JPY", "XAU/USD"]
+SYMBOLS = ["EUR/USD", "GBP/USD", "USD/JPY", "XAU/USD"]
 
 def get_m15_candles(symbol, size=40):
     url = f"https://api.twelvedata.com/time_series?symbol={symbol}&interval=15min&outputsize={size}&apikey={TWELVEDATA_API_KEY}"
@@ -45,14 +46,14 @@ def analyze_m15_market(symbol, candles):
 
     # M15 Candle references
     c1, c2, c3 = candles[-3], candles[-2], candles[-1]
-    
+
     # 1. Tori Trades M15 Structure (Dynamic Trendline/Structure Check)
     # Checks recent 15-period swing levels for higher-lows/lower-highs on M15
     recent_swings_high = max(c["high"] for c in candles[-18:-3])
     recent_swings_low = min(c["low"] for c in candles[-18:-3])
 
     # 2. Strategy Engine: Liquidity Sweep + Fair Value Gap (FVG)
-    
+
     # BEARISH SETUP (High Liquidity Sweep + Bearish FVG on M15)
     if c2["high"] > recent_swings_high and c3["close"] < c2["low"]:
         if c1["low"] > c3["high"]:  # Bearish Fair Value Gap
@@ -61,7 +62,7 @@ def analyze_m15_market(symbol, candles):
             risk = abs(sl - entry)
             tp1 = entry - (risk * 2)
             tp2 = entry - (risk * 3)
-            
+
             pip_mult = 100 if "JPY" in symbol else (10 if "XAU" in symbol else 10000)
             return {
                 "asset": symbol,
@@ -116,16 +117,15 @@ def format_signal(signal):
         f"⚡ <i>Manage risk responsibly according to your account size.</i>"
     )
 
-def main():
-    logging.info("GoLF_Fx AI Engine Online. Multi-asset market scanning active.")
+async def send_telegram_message(text):
     try:
-        bot.send_message(
-            chat_id=TELEGRAM_CHAT_ID,
-            text="🚀 <b>GoLF_Fx AI Engine Online.</b>\nMulti-asset market scanning active.",
-            parse_mode=ParseMode.HTML
-        )
+        await bot.send_message(chat_id=TELEGRAM_CHAT_ID, text=text, parse_mode=ParseMode.HTML)
     except Exception as e:
-        logging.error(f"Startup notification failed: {e}")
+        logging.error(f"Telegram send failed: {e}")
+
+async def main():
+    logging.info("GoLF_Fx AI Engine Online. Multi-asset market scanning active.")
+    await send_telegram_message("🚀 <b>GoLF_Fx AI Engine Online.</b>\nMulti-asset market scanning active.")
 
     last_signals = {}
 
@@ -138,15 +138,11 @@ def main():
                     signal_key = f"{symbol}_{signal['action']}_{signal['entry']}"
                     if last_signals.get(symbol) != signal_key:
                         message = format_signal(signal)
-                        bot.send_message(
-                            chat_id=TELEGRAM_CHAT_ID,
-                            text=message,
-                            parse_mode=ParseMode.HTML
-                        )
+                        await send_telegram_message(message)
                         last_signals[symbol] = signal_key
             time.sleep(12)  # Respect Twelve Data API limits
         time.sleep(300)      # Poll M15 candles every 5 minutes
 
 if __name__ == "__main__":
-    main()
-    
+    asyncio.run(main())
+            
