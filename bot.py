@@ -107,29 +107,78 @@ def get_trend_bias(df):
         return "bearish"
     return "neutral"
 
-def get_confirmed_bias(symbol):
-    """Daily and Weekly must agree for a higher-conviction bias."""
+def get_daily_bias_only(symbol):
+    """Daily EMA trend is the hard directional gate. Weekly agreement is
+    checked separately as a confluence bonus, not a mandatory requirement —
+    requiring both to align was cutting frequency too hard."""
     df_daily = get_data(symbol, "1day")
-    df_weekly = get_data(symbol, "1week")
-    if df_daily is None or df_weekly is None:
+    if df_daily is None:
         return None
-    daily_bias = get_trend_bias(df_daily)
-    weekly_bias = get_trend_bias(df_weekly)
-    if daily_bias == weekly_bias and daily_bias != "neutral":
-        return daily_bias
-    return None
+    bias = get_trend_bias(df_daily)
+    return bias if bias != "neutral" else None
 
 # ==============================================================================
-# 5. SESSION FILTER
+# 5. SESSION CHECK (now a scoring factor, not a hard gate)
 # ==============================================================================
 def in_session(symbol):
     hour = datetime.datetime.utcnow().hour
     if "JPY" in symbol:
-        # JPY pairs stay active through Asian + London + NY; only skip the
-        # quiet post-NY / pre-Asian gap.
         return not (21 <= hour < 23)
-    # Everything else: London/NY overlap window, the highest-liquidity hours.
     return 7 <= hour < 21
+
+# ==============================================================================
+# 5b. RSI (CONFIRMATION FACTOR)
+# ==============================================================================
+def calculate_rsi(df, period=14):
+    delta = df["close"].diff()
+    gain = delta.where(delta > 0, 0).rolling(period).mean()
+    loss = (-delta.where(delta < 0, 0)).rolling(period).mean()
+    rs = gain / loss
+    return 100 - (100 / (1 + rs))
+
+def rsi_confirms(df, direction):
+    rsi = calculate_rsi(df)
+    if rsi.empty or pd.isna(rsi.iloc[-1]):
+        return False, None
+    latest_rsi = rsi.iloc[-1]
+    ok = (45 <= latest_rsi <= 80) if direction == "BUY" else (20 <= latest_rsi <= 55)
+    return ok, latest_rsi
+
+# ==============================================================================
+# 5c. CONFLUENCE SCORE
+# ==============================================================================
+# Structure (Daily bias + a real zone/trendline + M15 rejection candle) and
+# the news filter are hard requirements. Everything else below is scored —
+# a signal needs enough of these lining up, not literally all of them.
+MIN_CONFLUENCE_SCORE = 50
+
+def compute_confluence_score(symbol, bias, direction, df_m15):
+    score = 0
+    details = []
+
+    df_weekly = get_data(symbol, "1week")
+    if df_weekly is not None and get_trend_bias(df_weekly) == bias:
+        score += 20
+        details.append("Weekly bias agrees")
+
+    if check_liquidity_sweep(df_m15, bias):
+        score += 25
+        details.append("Liquidity sweep confirmed")
+
+    if dxy_confirms(symbol, direction):
+        score += 15
+        details.append("DXY aligned")
+
+    rsi_ok, rsi_val = rsi_confirms(df_m15, direction)
+    if rsi_ok:
+        score += 15
+        details.append(f"RSI aligned ({rsi_val:.0f})")
+
+    if in_session(symbol):
+        score += 15
+        details.append("Liquid session")
+
+    return score, details
 
 # ==============================================================================
 # 6. HIGH-IMPACT NEWS FILTER
@@ -299,42 +348,44 @@ def log_signal(symbol, bias, setup_label, direction, entry, sl, tp):
 # ==============================================================================
 # 13. SIGNAL DISPATCH (SHARED BY BOTH SETUP TYPES)
 # ==============================================================================
-def fire_signal(symbol, bias, setup_label, level_desc, direction, entry_price, stop_loss, setup_key):
+def fire_signal(symbol, bias, setup_label, level_desc, direction, entry_price, stop_loss, setup_key, score, details):
     now = time.time()
     if setup_key in last_setup_signaled and (now - last_setup_signaled[setup_key]) < SETUP_COOLDOWN_SECONDS:
         return
 
     risk = abs(entry_price - stop_loss)
     take_profit = entry_price + risk * 2 if direction == "BUY" else entry_price - risk * 2
+    details_text = "\n".join(f"✔ {d}" for d in details) if details else "(structure-only setup)"
 
     msg = (
         f"📊 *TOP-DOWN SIGNAL* 📊\n\n"
         f"Asset: *{symbol}*\n"
-        f"Bias (Daily+Weekly): *{bias.upper()}*\n"
+        f"Bias (Daily): *{bias.upper()}*\n"
         f"Setup: *{setup_label}*\n"
         f"Level: {level_desc}\n"
         f"Action: *{direction}*\n\n"
         f"Entry: `{entry_price:.4f}`\n"
         f"SL: `{stop_loss:.4f}`\n"
         f"TP: `{take_profit:.4f}` (1:2 RR)\n\n"
-        f"✔ Liquidity sweep confirmed\n"
-        f"✔ DXY correlation checked\n"
-        f"✔ No high-impact news nearby"
+        f"Confluence Score: *{score}/90*\n"
+        f"{details_text}"
     )
     send_telegram(msg)
     log_signal(symbol, bias, setup_label, direction, entry_price, stop_loss, take_profit)
     last_setup_signaled[setup_key] = now
 
 # ==============================================================================
-# 14. MARKET SCANNER (FULL STACK: BIAS -> SESSION -> NEWS -> DXY -> ZONE/LINE -> M15 -> SWEEP)
+# 14. MARKET SCANNER
+# Hard requirements: Daily bias, a real 4H zone/trendline, M15 rejection
+# candle, and no nearby high-impact news. Everything else (weekly agreement,
+# liquidity sweep, DXY, RSI, session) is scored — needs MIN_CONFLUENCE_SCORE
+# to actually fire, not a unanimous vote.
 # ==============================================================================
 def analyze_market(symbol):
-    if not in_session(symbol):
-        return
     if is_near_high_impact_news(symbol):
         return
 
-    bias = get_confirmed_bias(symbol)  # Daily + Weekly must agree
+    bias = get_daily_bias_only(symbol)
     if bias is None:
         return
 
@@ -347,28 +398,29 @@ def analyze_market(symbol):
     entry_price = latest_m15["close"]
     direction = "BUY" if bias == "bullish" else "SELL"
 
-    if not dxy_confirms(symbol, direction):
-        return
-
-    # --- Setup 1: Supply/Demand zone rejection + liquidity sweep ---
+    # --- Setup 1: Supply/Demand zone rejection ---
     zone = find_zones(df_4h, bias)
-    if zone and check_zone_entry(df_m15, zone) and check_liquidity_sweep(df_m15, bias):
-        stop_loss = zone["bottom"] * 0.999 if zone["type"] == "demand" else zone["top"] * 1.001
-        setup_key = (symbol, "zone", round((zone["top"] + zone["bottom"]) / 2, 4))
-        fire_signal(symbol, bias, "Supply/Demand Zone Rejection",
-                    f"{zone['bottom']:.4f} - {zone['top']:.4f}", direction,
-                    entry_price, stop_loss, setup_key)
+    if zone and check_zone_entry(df_m15, zone):
+        score, details = compute_confluence_score(symbol, bias, direction, df_m15)
+        if score >= MIN_CONFLUENCE_SCORE:
+            stop_loss = zone["bottom"] * 0.999 if zone["type"] == "demand" else zone["top"] * 1.001
+            setup_key = (symbol, "zone", round((zone["top"] + zone["bottom"]) / 2, 4))
+            fire_signal(symbol, bias, "Supply/Demand Zone Rejection",
+                        f"{zone['bottom']:.4f} - {zone['top']:.4f}", direction,
+                        entry_price, stop_loss, setup_key, score, details)
 
-    # --- Setup 2: Tori-style trendline bounce + liquidity sweep ---
+    # --- Setup 2: Tori-style trendline bounce ---
     trendline = find_trendline(df_4h, bias)
-    if trendline and check_trendline_bounce(df_m15, trendline, bias) and check_liquidity_sweep(df_m15, bias):
-        line_now = trendline_value_at(trendline, latest_m15["ts"])
-        buffer = entry_price * 0.0015
-        stop_loss = line_now - buffer if bias == "bullish" else line_now + buffer
-        setup_key = (symbol, "trendline", round(line_now, 4))
-        fire_signal(symbol, bias, "Tori Trendline Bounce",
-                    f"Action Line @ {line_now:.4f}", direction,
-                    entry_price, stop_loss, setup_key)
+    if trendline and check_trendline_bounce(df_m15, trendline, bias):
+        score, details = compute_confluence_score(symbol, bias, direction, df_m15)
+        if score >= MIN_CONFLUENCE_SCORE:
+            line_now = trendline_value_at(trendline, latest_m15["ts"])
+            buffer = entry_price * 0.0015
+            stop_loss = line_now - buffer if bias == "bullish" else line_now + buffer
+            setup_key = (symbol, "trendline", round(line_now, 4))
+            fire_signal(symbol, bias, "Tori Trendline Bounce",
+                        f"Action Line @ {line_now:.4f}", direction,
+                        entry_price, stop_loss, setup_key, score, details)
 
 # ==============================================================================
 # 15. MAIN SCANNER LOOP
@@ -379,8 +431,10 @@ def is_weekend():
 def run_trading_bot():
     print("🚀 Full-Stack Top-Down Engine Started...")
     send_telegram(
-        "✅ Bot upgraded: Daily+Weekly bias, session filter, news filter, "
-        "DXY correlation, liquidity sweep confirmation, and signal journal all active."
+        "✅ Bot upgraded: structure (Daily bias + 4H zone/trendline + M15 candle) "
+        "is required, plus a confluence score from Weekly bias, liquidity sweep, "
+        "DXY, RSI, and session — fires once the score clears the bar, not only "
+        "when everything lines up. High-impact news still blocks signals outright."
     )
     while True:
         try:
@@ -402,4 +456,3 @@ threading.Thread(target=run_trading_bot, daemon=True).start()
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
     app.run(host="0.0.0.0", port=port)
-        
