@@ -9,7 +9,7 @@ import numpy as np
 from collections import defaultdict
 
 # ==============================================================================
-# 0. FLASK KEEP-ALIVE SERVER (FOR RENDER)
+# 0. FLASK KEEP-ALIVE SERVER (FOR RENDER DEPLOYMENT)
 # ==============================================================================
 app = Flask(__name__)
 
@@ -17,12 +17,10 @@ SIGNAL_LOG_PATH = "/tmp/signal_log.csv"
 
 @app.route('/')
 def home():
-    return "Top-Down SMC + Tori Trendline Bot is Live & Scanning!"
+    return "Multi-Asset Strategy Engine (XAU, EUR, GBP, JPY) is Live & Scanning!"
 
 @app.route('/log')
 def view_log():
-    # Note: /tmp resets on every redeploy/restart, so this is a running
-    # session log, not a permanent record. Good for a quick sanity check.
     try:
         with open(SIGNAL_LOG_PATH) as f:
             return f"<pre>{f.read()}</pre>"
@@ -30,21 +28,21 @@ def view_log():
         return "No signals logged yet this session."
 
 # ==============================================================================
-# 1. CONFIGURATION
+# 1. CONFIGURATION & CORE ASSET MATRIX
 # ==============================================================================
 TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
 TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID")
 TWELVE_DATA_API_KEY = os.environ.get("TWELVE_DATA_API_KEY")
 
-SYMBOLS = ["XAU/USD", "EUR/USD", "GBP/USD", "USD/JPY", "USD/CAD", "AUD/USD", "NZD/USD", "GBP/JPY"]
+# Primary 4-Asset Focus: Gold + Top 3 Forex Pairs
+SYMBOLS = ["XAU/USD", "EUR/USD", "GBP/USD", "USD/JPY"]
 
-# Refresh cadence per timeframe, matched to how often each candle actually
-# closes, to stay well under TwelveData's free-tier 800 calls/day limit.
+# Candle refresh limits to preserve API quotas
 REFRESH = {"1day": 8 * 3600, "4h": 4 * 3600, "15min": 20 * 60, "1week": 24 * 3600}
 
-cache = defaultdict(dict)  # cache[symbol][interval] = {"df": df, "ts": fetch_time}
+cache = defaultdict(dict)
 
-SETUP_COOLDOWN_SECONDS = 90 * 60  # 1.5 hours per exact setup, not a daily cap
+SETUP_COOLDOWN_SECONDS = 90 * 60  # 1.5-hour cooldown per setup
 last_setup_signaled = {}
 
 NEWS_URL = "https://nfs.faireconomy.media/ff_calendar_thisweek.json"
@@ -53,7 +51,7 @@ NEWS_BUFFER_MINUTES = 30
 news_cache = {"data": None, "ts": 0}
 
 # ==============================================================================
-# 2. TELEGRAM DISPATCH
+# 2. TELEGRAM ALERTS
 # ==============================================================================
 def send_telegram(message):
     url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
@@ -65,7 +63,7 @@ def send_telegram(message):
         print(f"Error sending Telegram alert: {e}")
 
 # ==============================================================================
-# 3. DATA FETCHING (CACHED PER SYMBOL+TIMEFRAME, KEEPS TIMESTAMPS)
+# 3. DATA FETCHING & CACHING
 # ==============================================================================
 def fetch_candles(symbol, interval, outputsize=150):
     url = (f"https://api.twelvedata.com/time_series?symbol={symbol}"
@@ -94,23 +92,23 @@ def get_data(symbol, interval):
     return entry["df"] if entry else None
 
 # ==============================================================================
-# 4. TREND BIAS (USED FOR BOTH DAILY AND WEEKLY)
+# 4. EMA TREND & BIAS STRATEGY (50 EMA & 200 EMA)
 # ==============================================================================
 def get_trend_bias(df):
     df = df.copy()
     df["ema50"] = df["close"].ewm(span=50, adjust=False).mean()
     df["ema200"] = df["close"].ewm(span=200, adjust=False).mean() if len(df) >= 200 else df["ema50"]
     latest = df.iloc[-1]
+    
+    # Bullish: Price > 50 EMA and 50 EMA >= 200 EMA
     if latest["close"] > latest["ema50"] and latest["ema50"] >= latest.get("ema200", latest["ema50"]):
         return "bullish"
+    # Bearish: Price < 50 EMA and 50 EMA <= 200 EMA
     elif latest["close"] < latest["ema50"] and latest["ema50"] <= latest.get("ema200", latest["ema50"]):
         return "bearish"
     return "neutral"
 
 def get_daily_bias_only(symbol):
-    """Daily EMA trend is the hard directional gate. Weekly agreement is
-    checked separately as a confluence bonus, not a mandatory requirement —
-    requiring both to align was cutting frequency too hard."""
     df_daily = get_data(symbol, "1day")
     if df_daily is None:
         return None
@@ -118,7 +116,7 @@ def get_daily_bias_only(symbol):
     return bias if bias != "neutral" else None
 
 # ==============================================================================
-# 5. SESSION CHECK (now a scoring factor, not a hard gate)
+# 5. RSI CONFIRMATION & SESSION TIMING
 # ==============================================================================
 def in_session(symbol):
     hour = datetime.datetime.utcnow().hour
@@ -126,9 +124,6 @@ def in_session(symbol):
         return not (21 <= hour < 23)
     return 7 <= hour < 21
 
-# ==============================================================================
-# 5b. RSI (CONFIRMATION FACTOR)
-# ==============================================================================
 def calculate_rsi(df, period=14):
     delta = df["close"].diff()
     gain = delta.where(delta > 0, 0).rolling(period).mean()
@@ -141,47 +136,50 @@ def rsi_confirms(df, direction):
     if rsi.empty or pd.isna(rsi.iloc[-1]):
         return False, None
     latest_rsi = rsi.iloc[-1]
+    # RSI Momentum rules: 45-80 for BUY (Bullish Zone), 20-55 for SELL (Bearish Zone)
     ok = (45 <= latest_rsi <= 80) if direction == "BUY" else (20 <= latest_rsi <= 55)
     return ok, latest_rsi
 
 # ==============================================================================
-# 5c. CONFLUENCE SCORE
+# 6. CONFLUENCE SCORING ENGINE
 # ==============================================================================
-# Structure (Daily bias + a real zone/trendline + M15 rejection candle) and
-# the news filter are hard requirements. Everything else below is scored —
-# a signal needs enough of these lining up, not literally all of them.
 MIN_CONFLUENCE_SCORE = 50
 
 def compute_confluence_score(symbol, bias, direction, df_m15):
     score = 0
     details = []
 
+    # 1. Higher-Timeframe Weekly Alignment (EMA)
     df_weekly = get_data(symbol, "1week")
     if df_weekly is not None and get_trend_bias(df_weekly) == bias:
         score += 20
-        details.append("Weekly bias agrees")
+        details.append("Weekly EMA Trend Aligned (+20)")
 
+    # 2. ICT Liquidity Sweep / Stop Hunt Reclaim
     if check_liquidity_sweep(df_m15, bias):
         score += 25
-        details.append("Liquidity sweep confirmed")
+        details.append("M15 Liquidity Sweep Confirmed (+25)")
 
+    # 3. DXY USD Correlation
     if dxy_confirms(symbol, direction):
         score += 15
-        details.append("DXY aligned")
+        details.append("DXY Correlation Aligned (+15)")
 
+    # 4. RSI 14 Momentum Zone
     rsi_ok, rsi_val = rsi_confirms(df_m15, direction)
     if rsi_ok:
         score += 15
-        details.append(f"RSI aligned ({rsi_val:.0f})")
+        details.append(f"RSI 14 Momentum Aligned ({rsi_val:.0f}) (+15)")
 
+    # 5. Active Session Liquidity Window
     if in_session(symbol):
         score += 15
-        details.append("Liquid session")
+        details.append("Active Session Liquidity (+15)")
 
     return score, details
 
 # ==============================================================================
-# 6. HIGH-IMPACT NEWS FILTER
+# 7. HIGH-IMPACT NEWS FILTER
 # ==============================================================================
 def get_news_calendar():
     now = time.time()
@@ -193,8 +191,8 @@ def get_news_calendar():
         news_cache["ts"] = now
         return res
     except Exception as e:
-        print(f"News calendar fetch failed (skipping news filter): {e}")
-        return news_cache["data"]  # fail open — stale/None data means we don't block signals
+        print(f"News calendar fetch failed: {e}")
+        return news_cache["data"]
 
 def is_near_high_impact_news(symbol):
     events = get_news_calendar()
@@ -215,7 +213,7 @@ def is_near_high_impact_news(symbol):
     return False
 
 # ==============================================================================
-# 7. DXY CORRELATION CHECK (USD PAIRS ONLY)
+# 8. DXY CORRELATION CHECK
 # ==============================================================================
 def get_dxy_bias():
     df = get_data("DXY", "1day")
@@ -228,7 +226,7 @@ def dxy_confirms(symbol, direction):
         return True
     dxy_bias = get_dxy_bias()
     if dxy_bias is None or dxy_bias == "neutral":
-        return True  # fail open if DXY data is unavailable or unclear
+        return True
     base, quote = symbol.split("/")
     if quote == "USD":
         return dxy_bias == "bearish" if direction == "BUY" else dxy_bias == "bullish"
@@ -237,7 +235,7 @@ def dxy_confirms(symbol, direction):
     return True
 
 # ==============================================================================
-# 8. 4H SUPPLY/DEMAND ZONE DETECTION
+# 9. 4H SMC SUPPLY & DEMAND ZONES
 # ==============================================================================
 def find_zones(df, bias, lookback=50, swing_window=2):
     df = df.tail(lookback).reset_index(drop=True)
@@ -259,7 +257,7 @@ def find_zones(df, bias, lookback=50, swing_window=2):
     return best_zone
 
 # ==============================================================================
-# 9. TORI-STYLE TRENDLINE DETECTION (ACTION LINE)
+# 10. TORI ACTION LINE (TRENDLINE) DETECTION
 # ==============================================================================
 def find_trendline(df, bias, lookback=70, swing_window=2):
     df = df.tail(lookback).reset_index(drop=True)
@@ -287,7 +285,7 @@ def trendline_value_at(trendline, ts):
     return trendline["slope"] * ts + trendline["intercept"]
 
 # ==============================================================================
-# 10. M15 ENTRY CONFIRMATION (ZONE REJECTION OR TRENDLINE BOUNCE)
+# 11. ENTRY CONFIRMATION ENGINE
 # ==============================================================================
 def check_zone_entry(df, zone):
     if zone is None or len(df) < 3:
@@ -312,15 +310,7 @@ def check_trendline_bounce(df, trendline, bias):
         return latest["close"] > latest["open"] and latest["close"] > line_now
     return latest["close"] < latest["open"] and latest["close"] < line_now
 
-# ==============================================================================
-# 11. LIQUIDITY SWEEP CHECK (ICT-STYLE STOP HUNT + RECLAIM)
-# ==============================================================================
 def check_liquidity_sweep(df, bias, lookback=8):
-    """
-    Confirms the same M15 candle that triggered the rejection/bounce also
-    swept beyond a recent local high/low before closing back — a stop hunt
-    followed by reclaim, not just a touch.
-    """
     if len(df) < lookback + 1:
         return False
     window = df.tail(lookback + 1).reset_index(drop=True)
@@ -332,7 +322,7 @@ def check_liquidity_sweep(df, bias, lookback=8):
     return latest["high"] > local_high and latest["close"] < local_high
 
 # ==============================================================================
-# 12. SIGNAL JOURNAL
+# 12. LOGGING & TELEGRAM SIGNAL DISPATCH
 # ==============================================================================
 def log_signal(symbol, bias, setup_label, direction, entry, sl, tp):
     try:
@@ -345,9 +335,6 @@ def log_signal(symbol, bias, setup_label, direction, entry, sl, tp):
     except Exception as e:
         print(f"Failed to log signal: {e}")
 
-# ==============================================================================
-# 13. SIGNAL DISPATCH (SHARED BY BOTH SETUP TYPES)
-# ==============================================================================
 def fire_signal(symbol, bias, setup_label, level_desc, direction, entry_price, stop_loss, setup_key, score, details):
     now = time.time()
     if setup_key in last_setup_signaled and (now - last_setup_signaled[setup_key]) < SETUP_COOLDOWN_SECONDS:
@@ -355,12 +342,12 @@ def fire_signal(symbol, bias, setup_label, level_desc, direction, entry_price, s
 
     risk = abs(entry_price - stop_loss)
     take_profit = entry_price + risk * 2 if direction == "BUY" else entry_price - risk * 2
-    details_text = "\n".join(f"✔ {d}" for d in details) if details else "(structure-only setup)"
+    details_text = "\n".join(f"✔ {d}" for d in details) if details else "(Structure Only)"
 
     msg = (
-        f"📊 *TOP-DOWN SIGNAL* 📊\n\n"
+        f"📊 *STRATEGY SIGNAL* 📊\n\n"
         f"Asset: *{symbol}*\n"
-        f"Bias (Daily): *{bias.upper()}*\n"
+        f"Daily EMA Bias: *{bias.upper()}*\n"
         f"Setup: *{setup_label}*\n"
         f"Level: {level_desc}\n"
         f"Action: *{direction}*\n\n"
@@ -375,11 +362,7 @@ def fire_signal(symbol, bias, setup_label, level_desc, direction, entry_price, s
     last_setup_signaled[setup_key] = now
 
 # ==============================================================================
-# 14. MARKET SCANNER
-# Hard requirements: Daily bias, a real 4H zone/trendline, M15 rejection
-# candle, and no nearby high-impact news. Everything else (weekly agreement,
-# liquidity sweep, DXY, RSI, session) is scored — needs MIN_CONFLUENCE_SCORE
-# to actually fire, not a unanimous vote.
+# 13. MARKET SCANNER ENGINE
 # ==============================================================================
 def analyze_market(symbol):
     if is_near_high_impact_news(symbol):
@@ -398,18 +381,18 @@ def analyze_market(symbol):
     entry_price = latest_m15["close"]
     direction = "BUY" if bias == "bullish" else "SELL"
 
-    # --- Setup 1: Supply/Demand zone rejection ---
+    # Setup 1: 4H Supply/Demand Zone Rejection
     zone = find_zones(df_4h, bias)
     if zone and check_zone_entry(df_m15, zone):
         score, details = compute_confluence_score(symbol, bias, direction, df_m15)
         if score >= MIN_CONFLUENCE_SCORE:
             stop_loss = zone["bottom"] * 0.999 if zone["type"] == "demand" else zone["top"] * 1.001
             setup_key = (symbol, "zone", round((zone["top"] + zone["bottom"]) / 2, 4))
-            fire_signal(symbol, bias, "Supply/Demand Zone Rejection",
+            fire_signal(symbol, bias, "SMC Zone Rejection",
                         f"{zone['bottom']:.4f} - {zone['top']:.4f}", direction,
                         entry_price, stop_loss, setup_key, score, details)
 
-    # --- Setup 2: Tori-style trendline bounce ---
+    # Setup 2: Tori Action Line (Trendline) Bounce
     trendline = find_trendline(df_4h, bias)
     if trendline and check_trendline_bounce(df_m15, trendline, bias):
         score, details = compute_confluence_score(symbol, bias, direction, df_m15)
@@ -418,23 +401,22 @@ def analyze_market(symbol):
             buffer = entry_price * 0.0015
             stop_loss = line_now - buffer if bias == "bullish" else line_now + buffer
             setup_key = (symbol, "trendline", round(line_now, 4))
-            fire_signal(symbol, bias, "Tori Trendline Bounce",
+            fire_signal(symbol, bias, "Tori Action Line Bounce",
                         f"Action Line @ {line_now:.4f}", direction,
                         entry_price, stop_loss, setup_key, score, details)
 
 # ==============================================================================
-# 15. MAIN SCANNER LOOP
+# 14. EXECUTION LOOP & ENTRY POINT
 # ==============================================================================
 def is_weekend():
     return datetime.datetime.utcnow().weekday() >= 5
 
 def run_trading_bot():
-    print("🚀 Full-Stack Top-Down Engine Started...")
+    print("🚀 Multi-Asset Strategy Engine Active...")
     send_telegram(
-        "✅ Bot upgraded: structure (Daily bias + 4H zone/trendline + M15 candle) "
-        "is required, plus a confluence score from Weekly bias, liquidity sweep, "
-        "DXY, RSI, and session — fires once the score clears the bar, not only "
-        "when everything lines up. High-impact news still blocks signals outright."
+        "✅ Engine updated: Active pairs set to XAU/USD, EUR/USD, GBP/USD, USD/JPY.\n"
+        "Strategy integrated: Daily EMA (50/200) trend filter + 4H S/D & Action Lines + "
+        "M15 execution with RSI momentum and news filter."
     )
     while True:
         try:
@@ -448,9 +430,6 @@ def run_trading_bot():
             print(f"Error in main loop: {e}")
         time.sleep(300)
 
-# ==============================================================================
-# 16. APPLICATION ENTRY POINT
-# ==============================================================================
 threading.Thread(target=run_trading_bot, daemon=True).start()
 
 if __name__ == "__main__":
