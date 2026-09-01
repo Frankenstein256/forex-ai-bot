@@ -34,12 +34,10 @@ TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
 TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID")
 TWELVE_DATA_API_KEY = os.environ.get("TWELVE_DATA_API_KEY")
 
-# Primary 4-Asset Focus: Gold + Top 3 Forex Pairs
+# Core Assets: Gold + Top 3 Forex Pairs
 SYMBOLS = ["XAU/USD", "EUR/USD", "GBP/USD", "USD/JPY"]
 
-# Candle refresh limits to preserve API quotas
 REFRESH = {"1day": 8 * 3600, "4h": 4 * 3600, "15min": 20 * 60, "1week": 24 * 3600}
-
 cache = defaultdict(dict)
 
 SETUP_COOLDOWN_SECONDS = 90 * 60  # 1.5-hour cooldown per setup
@@ -100,10 +98,8 @@ def get_trend_bias(df):
     df["ema200"] = df["close"].ewm(span=200, adjust=False).mean() if len(df) >= 200 else df["ema50"]
     latest = df.iloc[-1]
     
-    # Bullish: Price > 50 EMA and 50 EMA >= 200 EMA
     if latest["close"] > latest["ema50"] and latest["ema50"] >= latest.get("ema200", latest["ema50"]):
         return "bullish"
-    # Bearish: Price < 50 EMA and 50 EMA <= 200 EMA
     elif latest["close"] < latest["ema50"] and latest["ema50"] <= latest.get("ema200", latest["ema50"]):
         return "bearish"
     return "neutral"
@@ -136,7 +132,6 @@ def rsi_confirms(df, direction):
     if rsi.empty or pd.isna(rsi.iloc[-1]):
         return False, None
     latest_rsi = rsi.iloc[-1]
-    # RSI Momentum rules: 45-80 for BUY (Bullish Zone), 20-55 for SELL (Bearish Zone)
     ok = (45 <= latest_rsi <= 80) if direction == "BUY" else (20 <= latest_rsi <= 55)
     return ok, latest_rsi
 
@@ -149,29 +144,24 @@ def compute_confluence_score(symbol, bias, direction, df_m15):
     score = 0
     details = []
 
-    # 1. Higher-Timeframe Weekly Alignment (EMA)
     df_weekly = get_data(symbol, "1week")
     if df_weekly is not None and get_trend_bias(df_weekly) == bias:
         score += 20
         details.append("Weekly EMA Trend Aligned (+20)")
 
-    # 2. ICT Liquidity Sweep / Stop Hunt Reclaim
     if check_liquidity_sweep(df_m15, bias):
         score += 25
         details.append("M15 Liquidity Sweep Confirmed (+25)")
 
-    # 3. DXY USD Correlation
     if dxy_confirms(symbol, direction):
         score += 15
         details.append("DXY Correlation Aligned (+15)")
 
-    # 4. RSI 14 Momentum Zone
     rsi_ok, rsi_val = rsi_confirms(df_m15, direction)
     if rsi_ok:
         score += 15
         details.append(f"RSI 14 Momentum Aligned ({rsi_val:.0f}) (+15)")
 
-    # 5. Active Session Liquidity Window
     if in_session(symbol):
         score += 15
         details.append("Active Session Liquidity (+15)")
@@ -362,7 +352,7 @@ def fire_signal(symbol, bias, setup_label, level_desc, direction, entry_price, s
     last_setup_signaled[setup_key] = now
 
 # ==============================================================================
-# 13. MARKET SCANNER ENGINE
+# 13. MARKET SCANNER ENGINE (STRICT RISK CONTROL)
 # ==============================================================================
 def analyze_market(symbol):
     if is_near_high_impact_news(symbol):
@@ -381,29 +371,45 @@ def analyze_market(symbol):
     entry_price = latest_m15["close"]
     direction = "BUY" if bias == "bullish" else "SELL"
 
-    # Setup 1: 4H Supply/Demand Zone Rejection
+    # Set asset-specific buffers (Gold uses price units; Forex uses pips)
+    is_gold = "XAU" in symbol
+    pip_factor = 1.0 if is_gold else 10000.0
+    max_allowed_risk_pips = 300.0 if is_gold else 30.0  # Max 30 pips risk for forex
+    buffer_offset = 1.5 if is_gold else 0.0010          # 10 pips for forex
+
+    # Setup 1: SMC Zone Rejection
     zone = find_zones(df_4h, bias)
     if zone and check_zone_entry(df_m15, zone):
-        score, details = compute_confluence_score(symbol, bias, direction, df_m15)
-        if score >= MIN_CONFLUENCE_SCORE:
-            stop_loss = zone["bottom"] * 0.999 if zone["type"] == "demand" else zone["top"] * 1.001
-            setup_key = (symbol, "zone", round((zone["top"] + zone["bottom"]) / 2, 4))
-            fire_signal(symbol, bias, "SMC Zone Rejection",
-                        f"{zone['bottom']:.4f} - {zone['top']:.4f}", direction,
-                        entry_price, stop_loss, setup_key, score, details)
+        zone_width = abs(zone["top"] - zone["bottom"]) * pip_factor
+        # Ignore oversized 4H zones (> 35 pips for forex, > 350 for gold)
+        if zone_width <= (350.0 if is_gold else 35.0):
+            m15_low = df_m15["low"].tail(5).min()
+            m15_high = df_m15["high"].tail(5).max()
+            stop_loss = (m15_low - buffer_offset) if direction == "BUY" else (m15_high + buffer_offset)
+            risk_pips = abs(entry_price - stop_loss) * pip_factor
 
-    # Setup 2: Tori Action Line (Trendline) Bounce
+            if risk_pips <= max_allowed_risk_pips:
+                score, details = compute_confluence_score(symbol, bias, direction, df_m15)
+                if score >= MIN_CONFLUENCE_SCORE:
+                    setup_key = (symbol, "zone", round((zone["top"] + zone["bottom"]) / 2, 4))
+                    fire_signal(symbol, bias, "SMC Zone Rejection",
+                                f"{zone['bottom']:.4f} - {zone['top']:.4f}", direction,
+                                entry_price, stop_loss, setup_key, score, details)
+
+    # Setup 2: Tori Action Line Bounce
     trendline = find_trendline(df_4h, bias)
     if trendline and check_trendline_bounce(df_m15, trendline, bias):
-        score, details = compute_confluence_score(symbol, bias, direction, df_m15)
-        if score >= MIN_CONFLUENCE_SCORE:
-            line_now = trendline_value_at(trendline, latest_m15["ts"])
-            buffer = entry_price * 0.0015
-            stop_loss = line_now - buffer if bias == "bullish" else line_now + buffer
-            setup_key = (symbol, "trendline", round(line_now, 4))
-            fire_signal(symbol, bias, "Tori Action Line Bounce",
-                        f"Action Line @ {line_now:.4f}", direction,
-                        entry_price, stop_loss, setup_key, score, details)
+        line_now = trendline_value_at(trendline, latest_m15["ts"])
+        stop_loss = (line_now - buffer_offset) if bias == "bullish" else (line_now + buffer_offset)
+        risk_pips = abs(entry_price - stop_loss) * pip_factor
+
+        if risk_pips <= max_allowed_risk_pips:
+            score, details = compute_confluence_score(symbol, bias, direction, df_m15)
+            if score >= MIN_CONFLUENCE_SCORE:
+                setup_key = (symbol, "trendline", round(line_now, 4))
+                fire_signal(symbol, bias, "Tori Action Line Bounce",
+                            f"Action Line @ {line_now:.4f}", direction,
+                            entry_price, stop_loss, setup_key, score, details)
 
 # ==============================================================================
 # 14. EXECUTION LOOP & ENTRY POINT
@@ -414,9 +420,8 @@ def is_weekend():
 def run_trading_bot():
     print("🚀 Multi-Asset Strategy Engine Active...")
     send_telegram(
-        "✅ Engine updated: Active pairs set to XAU/USD, EUR/USD, GBP/USD, USD/JPY.\n"
-        "Strategy integrated: Daily EMA (50/200) trend filter + 4H S/D & Action Lines + "
-        "M15 execution with RSI momentum and news filter."
+        "✅ Engine updated: Tight intraday Stop Loss controls applied.\n"
+        "Forex pairs capped at 10-30 pips max risk per trade."
     )
     while True:
         try:
@@ -435,3 +440,4 @@ threading.Thread(target=run_trading_bot, daemon=True).start()
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
     app.run(host="0.0.0.0", port=port)
+    
