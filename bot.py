@@ -1,12 +1,25 @@
 import os
 import time
 import asyncio
+import threading
 import logging
 import requests
+from flask import Flask
 from telegram import Bot
 from telegram.constants import ParseMode
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
+
+# ==============================================================================
+# FLASK STUB (satisfies Render's Web Service port requirement only —
+# the actual scanning logic below is completely unchanged and runs in a
+# background thread, exactly as before)
+# ==============================================================================
+app = Flask(__name__)
+
+@app.route('/')
+def home():
+    return "GoLF_Fx AI Engine is Live & Scanning!"
 
 # Environment Variables on Render
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
@@ -143,5 +156,11 @@ async def main():
             time.sleep(12)  # Respect Twelve Data API limits
         time.sleep(300)      # Poll M15 candles every 5 minutes
 
-if __name__ == "__main__":
+def start_scanning():
     asyncio.run(main())
+
+if __name__ == "__main__":
+    threading.Thread(target=start_scanning, daemon=True).start()
+    port = int(os.environ.get("PORT", 10000))
+    app.run(host="0.0.0.0", port=port)
+        
