@@ -61,15 +61,19 @@ def analyze_m15_market(symbol, candles):
     c1, c2, c3 = candles[-3], candles[-2], candles[-1]
 
     # 1. Tori Trades M15 Structure (Dynamic Trendline/Structure Check)
-    # Checks recent 15-period swing levels for higher-lows/lower-highs on M15
-    recent_swings_high = max(c["high"] for c in candles[-18:-3])
-    recent_swings_low = min(c["low"] for c in candles[-18:-3])
+    # Checks recent swing levels for higher-lows/lower-highs on M15
+    recent_swings_high = max(c["high"] for c in candles[-10:-3])
+    recent_swings_low = min(c["low"] for c in candles[-10:-3])
 
     # 2. Strategy Engine: Liquidity Sweep + Fair Value Gap (FVG)
+    # Tolerance allows a near-gap (small overlap) to count, not just a perfect
+    # zero-overlap gap — the strict version was too rare to fire often.
+    avg_range = sum(c["high"] - c["low"] for c in candles[-10:]) / 10
+    fvg_tolerance = avg_range * 0.25
 
     # BEARISH SETUP (High Liquidity Sweep + Bearish FVG on M15)
     if c2["high"] > recent_swings_high and c3["close"] < c2["low"]:
-        if c1["low"] > c3["high"]:  # Bearish Fair Value Gap
+        if c1["low"] > c3["high"] - fvg_tolerance:  # Bearish FVG (with tolerance)
             entry = c3["close"]
             sl = c2["high"]
             risk = abs(sl - entry)
@@ -91,7 +95,7 @@ def analyze_m15_market(symbol, candles):
 
     # BULLISH SETUP (Low Liquidity Sweep + Bullish FVG on M15)
     if c2["low"] < recent_swings_low and c3["close"] > c2["high"]:
-        if c3["low"] > c1["high"]:  # Bullish Fair Value Gap
+        if c3["low"] > c1["high"] - fvg_tolerance:  # Bullish FVG (with tolerance)
             entry = c3["close"]
             sl = c2["low"]
             risk = abs(entry - sl)
@@ -147,6 +151,7 @@ async def main():
             candles = get_m15_candles(symbol)
             if candles:
                 signal = analyze_m15_market(symbol, candles)
+                logging.info(f"Scanned {symbol} — {'setup found!' if signal else 'no valid setup yet.'}")
                 if signal:
                     signal_key = f"{symbol}_{signal['action']}_{signal['entry']}"
                     if last_signals.get(symbol) != signal_key:
@@ -154,6 +159,7 @@ async def main():
                         await send_telegram_message(message)
                         last_signals[symbol] = signal_key
             time.sleep(12)  # Respect Twelve Data API limits
+        logging.info("Full scan cycle complete. Sleeping 5 minutes...")
         time.sleep(300)      # Poll M15 candles every 5 minutes
 
 def start_scanning():
@@ -163,4 +169,4 @@ if __name__ == "__main__":
     threading.Thread(target=start_scanning, daemon=True).start()
     port = int(os.environ.get("PORT", 10000))
     app.run(host="0.0.0.0", port=port)
-        
+            
