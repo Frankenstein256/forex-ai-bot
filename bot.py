@@ -11,7 +11,7 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(
 # Environment Variables on Render
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
-TWELVEDATA_API_KEY = os.getenv("TWELVEDATA_API_KEY")
+TWELVEDATA_API_KEY = os.getenv("TWELVE_DATA_API_KEY")
 
 bot = Bot(token=TELEGRAM_BOT_TOKEN)
 
@@ -145,4 +145,3 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
-            
