@@ -25,7 +25,7 @@ SMT_SYMBOL = os.getenv("SMT_SYMBOL", "GBP/USD")
 # and scores on the other confluences instead.
 PAIRS = [
     {"symbol": SYMBOL, "smt_symbol": SMT_SYMBOL},   # EUR/USD vs GBP/USD
-    {"symbol": "XAU/USD", "smt_symbol": "XAG/USD"},  # Gold vs Silver
+    {"symbol": "XAU/USD", "smt_symbol": None},       # Gold - no free-tier SMT partner (Silver needs paid plan)
     {"symbol": "USD/JPY", "smt_symbol": None},       # no SMT partner configured yet
 ]
 
@@ -50,3 +50,4 @@ def check_config():
             f"Missing required environment variables: {', '.join(missing)}. "
             "Set these in your Render dashboard under Environment."
         )
+        
