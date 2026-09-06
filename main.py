@@ -1,7 +1,16 @@
 """
 main.py
 -------
-This is the file Render actually runs. It loops forever:
+This is the file Render actually runs.
+
+Render's free "Web Service" tier expects something to be listening
+on a web port (that's how Render checks the service is alive). Our
+bot doesn't actually need to serve a website - it just scans the
+market quietly in the background. So we run a TINY fake webpage
+(just says "Bot is running") on one thread, purely to keep Render
+happy, while the real scanning loop runs on another thread.
+
+The scanning loop itself does:
 1. For each configured pair (EURUSD, XAUUSD, USDJPY):
    - Fetch fresh candle data
    - Check for a valid setup
@@ -9,8 +18,11 @@ This is the file Render actually runs. It loops forever:
 2. Wait, then repeat
 """
 
+import os
 import time
+import threading
 import traceback
+from http.server import BaseHTTPRequestHandler, HTTPServer
 
 from config import PAIRS, MIN_SCORE, MIN_RR, SCAN_SECONDS, check_config
 from data_feed import get_candles
@@ -22,6 +34,28 @@ from telegram_bot import send_message
 # so pairs don't overwrite each other's tracking.
 last_signal_time = {}
 
+
+# ---------- Tiny fake webpage, just to satisfy Render's port check ----------
+
+class HealthCheckHandler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(200)
+        self.send_header("Content-type", "text/plain")
+        self.end_headers()
+        self.wfile.write(b"Signal bot is running.")
+
+    def log_message(self, format, *args):
+        pass  # keeps Render logs clean - we don't need every web ping logged
+
+
+def run_fake_webserver():
+    port = int(os.environ.get("PORT", 10000))  # Render sets PORT automatically
+    server = HTTPServer(("0.0.0.0", port), HealthCheckHandler)
+    print(f"Fake webserver listening on port {port} (for Render's benefit only)")
+    server.serve_forever()
+
+
+# ---------- The actual bot logic ----------
 
 def scan_pair(pair_config: dict):
     symbol = pair_config["symbol"]
@@ -68,7 +102,7 @@ def scan_pair(pair_config: dict):
     send_message(message)
 
 
-def main():
+def run_scan_loop():
     check_config()
     pair_names = ", ".join(p["symbol"] for p in PAIRS)
     send_message(f"✅ Signal bot started. Scanning: {pair_names}")
@@ -83,5 +117,15 @@ def main():
         time.sleep(SCAN_SECONDS)
 
 
+def main():
+    # Run the scan loop in a background thread...
+    scanner_thread = threading.Thread(target=run_scan_loop, daemon=True)
+    scanner_thread.start()
+
+    # ...while the main thread just keeps a webpage alive for Render.
+    run_fake_webserver()
+
+
 if __name__ == "__main__":
     main()
+   
