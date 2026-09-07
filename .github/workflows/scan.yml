@@ -8,6 +8,12 @@ on:
     - cron: "*/15 * * * *"
   workflow_dispatch:
 
+# This gives the workflow permission to push changes (like the
+# updated state.json) back to the repo. Without this, GitHub only
+# allows read access by default and the final step fails.
+permissions:
+  contents: write
+
 jobs:
   scan:
     runs-on: ubuntu-latest
