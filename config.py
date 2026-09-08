@@ -31,7 +31,16 @@ PAIRS = [
 
 # --- Strategy settings ---
 MIN_RR = float(os.getenv("MIN_RR", "2.0"))
-MIN_SCORE = int(os.getenv("MIN_SCORE", "6"))
+# MIN_SCORE: threshold out of a max of 8 (EUR/USD, which has an SMT
+# partner) or 6 (XAU/USD, USD/JPY, which don't). Lowered from 6 to 5
+# on [priority change: signal generation first] - at 6, pairs without
+# an SMT partner were mathematically forced to require EVERY remaining
+# condition (sweep AND FVG AND displacement, zero slack), which was
+# too close to an all-or-nothing gate. At 5: EUR/USD needs any 2 of
+# {sweep, SMT, FVG}; XAU/USD and USD/JPY need sweep+FVG together
+# (displacement becomes optional rather than mandatory). Still
+# requires genuine multi-factor confluence - not a single condition.
+MIN_SCORE = int(os.getenv("MIN_SCORE", "5"))
 
 # --- Timing ---
 SCAN_SECONDS = int(os.getenv("SCAN_SECONDS", "60"))
@@ -98,4 +107,4 @@ def check_config():
         raise RuntimeError(
             f"Missing required environment variables: {', '.join(missing)}. "
             "Set these as GitHub Actions repository secrets."
-        )
+)
