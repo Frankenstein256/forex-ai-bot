@@ -163,3 +163,6 @@
 {"scan_time": "2026-09-09 11:30:10", "symbol": "EUR/USD", "candle_time": "2026-09-09 11:15:00", "api_status": "ok", "setup_found": false, "telegram_status": "not_applicable"}
 {"scan_time": "2026-09-09 11:30:10", "symbol": "XAU/USD", "candle_time": "2026-09-09 11:15:00", "api_status": "ok", "setup_found": false, "telegram_status": "not_applicable"}
 {"scan_time": "2026-09-09 11:30:10", "symbol": "USD/JPY", "candle_time": "2026-09-09 11:15:00", "api_status": "ok", "setup_found": false, "telegram_status": "not_applicable"}
+{"scan_time": "2026-09-09 11:45:50", "symbol": "EUR/USD", "candle_time": "2026-09-09 11:30:00", "api_status": "ok", "setup_found": false, "telegram_status": "not_applicable"}
+{"scan_time": "2026-09-09 11:45:50", "symbol": "XAU/USD", "candle_time": "2026-09-09 11:30:00", "api_status": "ok", "setup_found": false, "telegram_status": "not_applicable"}
+{"scan_time": "2026-09-09 11:45:50", "symbol": "USD/JPY", "candle_time": "2026-09-09 11:30:00", "api_status": "ok", "setup_found": false, "telegram_status": "not_applicable"}
