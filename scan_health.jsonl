@@ -1,6 +1,3 @@
-{"scan_time": "2026-09-11 12:00:14", "symbol": "XAU/USD", "candle_time": "2026-09-11 11:45:00", "api_status": "ok", "setup_found": false, "telegram_status": "not_applicable"}
-{"scan_time": "2026-09-11 12:00:14", "symbol": "USD/JPY", "candle_time": "2026-09-11 11:45:00", "api_status": "ok", "setup_found": false, "telegram_status": "not_applicable"}
-{"scan_time": "2026-09-11 12:15:15", "symbol": "EUR/USD", "candle_time": "2026-09-11 12:00:00", "api_status": "ok", "setup_found": false, "telegram_status": "not_applicable"}
 {"scan_time": "2026-09-11 12:15:15", "symbol": "XAU/USD", "candle_time": "2026-09-11 12:00:00", "api_status": "ok", "setup_found": false, "telegram_status": "not_applicable"}
 {"scan_time": "2026-09-11 12:15:15", "symbol": "USD/JPY", "candle_time": "2026-09-11 12:00:00", "api_status": "ok", "setup_found": false, "telegram_status": "not_applicable"}
 {"scan_time": "2026-09-11 12:30:14", "symbol": "EUR/USD", "candle_time": "2026-09-11 12:15:00", "api_status": "ok", "setup_found": false, "telegram_status": "not_applicable"}
@@ -498,3 +495,6 @@
 {"scan_time": "2026-09-13 02:15:14", "symbol": "EUR/USD", "candle_time": "2026-09-13 02:00:00", "api_status": "ok", "setup_found": false, "telegram_status": "not_applicable"}
 {"scan_time": "2026-09-13 02:15:14", "symbol": "XAU/USD", "candle_time": "2026-09-13 02:00:00", "api_status": "ok", "setup_found": false, "telegram_status": "not_applicable"}
 {"scan_time": "2026-09-13 02:15:14", "symbol": "USD/JPY", "candle_time": "2026-09-13 02:00:00", "api_status": "ok", "setup_found": false, "telegram_status": "not_applicable"}
+{"scan_time": "2026-09-13 02:30:11", "symbol": "EUR/USD", "candle_time": "2026-09-13 02:15:00", "api_status": "ok", "setup_found": false, "telegram_status": "not_applicable"}
+{"scan_time": "2026-09-13 02:30:11", "symbol": "XAU/USD", "candle_time": "2026-09-13 02:15:00", "api_status": "ok", "setup_found": false, "telegram_status": "not_applicable"}
+{"scan_time": "2026-09-13 02:30:11", "symbol": "USD/JPY", "candle_time": "2026-09-13 02:15:00", "api_status": "ok", "setup_found": false, "telegram_status": "not_applicable"}
