@@ -1,0 +1,25 @@
+name: Trade Performance Report (diagnostic only)
+
+# Manual trigger only - reads trade_history.jsonl and prints stats.
+# Does not write anything back to the repo.
+on:
+  workflow_dispatch:
+
+jobs:
+  report:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run performance report
+        run: python report.py
+        
