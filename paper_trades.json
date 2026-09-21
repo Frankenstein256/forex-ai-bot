@@ -1,1 +1,21 @@
-[]
+[
+  {
+    "signal_id": "USDJPY-20260921211500",
+    "symbol": "USD/JPY",
+    "direction": "long",
+    "entry": 157.3674,
+    "stop": 157.26361,
+    "target": 157.67877000000001,
+    "rr": 3.0,
+    "score": 6,
+    "score_normalized": 75,
+    "max_possible_score": 8,
+    "reasons": [
+      "HTF bias: bullish",
+      "Liquidity sweep detected",
+      "SMT divergence vs EUR/JPY",
+      "Displacement candle present"
+    ],
+    "opened_at_candle_time": "2026-09-21 21:15:00"
+  }
+]
