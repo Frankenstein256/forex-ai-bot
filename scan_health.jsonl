@@ -1,6 +1,3 @@
-{"scan_time": "2026-09-19 15:00:18", "symbol": "ALL", "candle_time": null, "api_status": "market_closed", "setup_found": false, "telegram_status": "not_applicable", "trades_resolved": 0}
-{"scan_time": "2026-09-19 15:15:10", "symbol": "ALL", "candle_time": null, "api_status": "market_closed", "setup_found": false, "telegram_status": "not_applicable", "trades_resolved": 0}
-{"scan_time": "2026-09-19 15:30:10", "symbol": "ALL", "candle_time": null, "api_status": "market_closed", "setup_found": false, "telegram_status": "not_applicable", "trades_resolved": 0}
 {"scan_time": "2026-09-19 15:45:12", "symbol": "ALL", "candle_time": null, "api_status": "market_closed", "setup_found": false, "telegram_status": "not_applicable", "trades_resolved": 0}
 {"scan_time": "2026-09-19 16:00:49", "symbol": "ALL", "candle_time": null, "api_status": "market_closed", "setup_found": false, "telegram_status": "not_applicable", "trades_resolved": 0}
 {"scan_time": "2026-09-19 16:15:12", "symbol": "ALL", "candle_time": null, "api_status": "market_closed", "setup_found": false, "telegram_status": "not_applicable", "trades_resolved": 0}
@@ -498,3 +495,6 @@
 {"scan_time": "2026-09-22 02:45:11", "symbol": "EUR/USD", "candle_time": "2026-09-22 02:30:00", "api_status": "ok", "setup_found": false, "telegram_status": "not_applicable", "trades_resolved": 0, "min_score_used": 5}
 {"scan_time": "2026-09-22 02:45:11", "symbol": "XAU/USD", "candle_time": "2026-09-22 02:30:00", "api_status": "ok", "setup_found": false, "telegram_status": "not_applicable", "trades_resolved": 0, "min_score_used": 4}
 {"scan_time": "2026-09-22 02:45:11", "symbol": "USD/JPY", "candle_time": "2026-09-22 02:30:00", "api_status": "ok", "setup_found": false, "telegram_status": "not_applicable", "trades_resolved": 0, "min_score_used": 5}
+{"scan_time": "2026-09-22 03:00:15", "symbol": "EUR/USD", "candle_time": "2026-09-22 02:45:00", "api_status": "ok", "setup_found": false, "telegram_status": "not_applicable", "trades_resolved": 0, "min_score_used": 5}
+{"scan_time": "2026-09-22 03:00:15", "symbol": "XAU/USD", "candle_time": "2026-09-22 02:45:00", "api_status": "ok", "setup_found": false, "telegram_status": "not_applicable", "trades_resolved": 0, "min_score_used": 4}
+{"scan_time": "2026-09-22 03:00:15", "symbol": "USD/JPY", "candle_time": "2026-09-22 02:45:00", "api_status": "ok", "setup_found": false, "telegram_status": "not_applicable", "trades_resolved": 0, "min_score_used": 5}
