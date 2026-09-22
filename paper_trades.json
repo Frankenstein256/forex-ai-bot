@@ -16,5 +16,23 @@
       "Displacement candle present"
     ],
     "opened_at_candle_time": "2026-09-22 08:30:00"
+  },
+  {
+    "signal_id": "USDJPY-20260922100000",
+    "symbol": "USD/JPY",
+    "direction": "long",
+    "entry": 157.01416,
+    "stop": 156.81834,
+    "target": 157.60162,
+    "rr": 3.0,
+    "score": 5,
+    "score_normalized": 62,
+    "max_possible_score": 8,
+    "reasons": [
+      "HTF bias: bullish",
+      "Liquidity sweep detected",
+      "SMT divergence vs EUR/JPY"
+    ],
+    "opened_at_candle_time": "2026-09-22 10:00:00"
   }
 ]
