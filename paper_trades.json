@@ -16,23 +16,5 @@
       "Displacement candle present"
     ],
     "opened_at_candle_time": "2026-09-24 02:30:00"
-  },
-  {
-    "signal_id": "EURUSD-20260924063000",
-    "symbol": "EUR/USD",
-    "direction": "short",
-    "entry": 1.13845,
-    "stop": 1.13908,
-    "target": 1.1365599999999996,
-    "rr": 3.0,
-    "score": 5,
-    "score_normalized": 62,
-    "max_possible_score": 8,
-    "reasons": [
-      "HTF bias: bearish",
-      "Liquidity sweep detected",
-      "SMT divergence vs GBP/USD"
-    ],
-    "opened_at_candle_time": "2026-09-24 06:30:00"
   }
 ]
