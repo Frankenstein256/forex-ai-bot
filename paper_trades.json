@@ -1,1 +1,20 @@
-[]
+[
+  {
+    "signal_id": "XAUUSD-20260924023000",
+    "symbol": "XAU/USD",
+    "direction": "short",
+    "entry": 4296.55361,
+    "stop": 4304.10576,
+    "target": 4273.897159999999,
+    "rr": 3.0,
+    "score": 4,
+    "score_normalized": 67,
+    "max_possible_score": 6,
+    "reasons": [
+      "HTF bias: bearish",
+      "Retracement into FVG/IFVG zone",
+      "Displacement candle present"
+    ],
+    "opened_at_candle_time": "2026-09-24 02:30:00"
+  }
+]
