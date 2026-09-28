@@ -1,1 +1,20 @@
-[]
+[
+  {
+    "signal_id": "XAUUSD-20260928121500",
+    "symbol": "XAU/USD",
+    "direction": "short",
+    "entry": 4157.02947,
+    "stop": 4171.18545,
+    "target": 4114.561530000002,
+    "rr": 3.0,
+    "score": 4,
+    "score_normalized": 67,
+    "max_possible_score": 6,
+    "reasons": [
+      "HTF bias: bearish",
+      "Liquidity sweep detected",
+      "Displacement candle present"
+    ],
+    "opened_at_candle_time": "2026-09-28 12:15:00"
+  }
+]
