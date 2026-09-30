@@ -16,5 +16,23 @@
       "SMT divergence vs GBP/USD"
     ],
     "opened_at_candle_time": "2026-09-29 21:00:00"
+  },
+  {
+    "signal_id": "XAUUSD-20260930051500",
+    "symbol": "XAU/USD",
+    "direction": "long",
+    "entry": 4173.45099,
+    "stop": 4165.62526,
+    "target": 4196.928180000002,
+    "rr": 3.0,
+    "score": 5,
+    "score_normalized": 83,
+    "max_possible_score": 6,
+    "reasons": [
+      "HTF bias: bullish",
+      "Liquidity sweep detected",
+      "Retracement into FVG/IFVG zone"
+    ],
+    "opened_at_candle_time": "2026-09-30 05:15:00"
   }
 ]
