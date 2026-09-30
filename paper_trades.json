@@ -34,5 +34,23 @@
       "Displacement candle present"
     ],
     "opened_at_candle_time": "2026-09-30 02:45:00"
+  },
+  {
+    "signal_id": "XAUUSD-20260930033000",
+    "symbol": "XAU/USD",
+    "direction": "long",
+    "entry": 4174.89526,
+    "stop": 4167.87279,
+    "target": 4195.96267,
+    "rr": 3.0,
+    "score": 4,
+    "score_normalized": 67,
+    "max_possible_score": 6,
+    "reasons": [
+      "HTF bias: bullish",
+      "Retracement into FVG/IFVG zone",
+      "Displacement candle present"
+    ],
+    "opened_at_candle_time": "2026-09-30 03:30:00"
   }
 ]
