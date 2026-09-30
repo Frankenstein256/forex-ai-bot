@@ -1,11 +1,11 @@
 [
   {
-    "signal_id": "USDJPY-20260930180000",
+    "signal_id": "USDJPY-20260930181500",
     "symbol": "USD/JPY",
     "direction": "short",
-    "entry": 157.37302,
-    "stop": 157.38449,
-    "target": 157.33861,
+    "entry": 157.35065,
+    "stop": 157.39769,
+    "target": 157.20952999999997,
     "rr": 3.0,
     "score": 5,
     "score_normalized": 62,
@@ -15,6 +15,6 @@
       "Liquidity sweep detected",
       "SMT divergence vs EUR/JPY"
     ],
-    "opened_at_candle_time": "2026-09-30 18:00:00"
+    "opened_at_candle_time": "2026-09-30 18:15:00"
   }
 ]
