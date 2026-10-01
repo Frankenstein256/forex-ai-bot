@@ -18,12 +18,12 @@
     "opened_at_candle_time": "2026-10-01 10:30:00"
   },
   {
-    "signal_id": "XAUUSD-20261001120000",
+    "signal_id": "XAUUSD-20261001123000",
     "symbol": "XAU/USD",
     "direction": "short",
-    "entry": 4177.58416,
-    "stop": 4185.50142,
-    "target": 4153.832380000003,
+    "entry": 4183.72521,
+    "stop": 4187.04034,
+    "target": 4173.77982,
     "rr": 3.0,
     "score": 4,
     "score_normalized": 57,
@@ -33,6 +33,6 @@
       "Liquidity sweep detected",
       "Longer-term H4 trend confirms direction"
     ],
-    "opened_at_candle_time": "2026-10-01 12:00:00"
+    "opened_at_candle_time": "2026-10-01 12:30:00"
   }
 ]
