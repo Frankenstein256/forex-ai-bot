@@ -16,5 +16,23 @@
       "Longer-term H4 trend confirms direction"
     ],
     "opened_at_candle_time": "2026-10-01 10:30:00"
+  },
+  {
+    "signal_id": "XAUUSD-20261001120000",
+    "symbol": "XAU/USD",
+    "direction": "short",
+    "entry": 4177.58416,
+    "stop": 4185.50142,
+    "target": 4153.832380000003,
+    "rr": 3.0,
+    "score": 4,
+    "score_normalized": 57,
+    "max_possible_score": 7,
+    "reasons": [
+      "HTF bias: bearish",
+      "Liquidity sweep detected",
+      "Longer-term H4 trend confirms direction"
+    ],
+    "opened_at_candle_time": "2026-10-01 12:00:00"
   }
 ]
