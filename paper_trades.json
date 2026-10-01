@@ -1,1 +1,22 @@
-[]
+[
+  {
+    "signal_id": "GBPUSD-20261001014500",
+    "symbol": "GBP/USD",
+    "direction": "long",
+    "entry": 1.32618,
+    "stop": 1.32611,
+    "target": 1.32639,
+    "rr": 3.0,
+    "score": 7,
+    "score_normalized": 78,
+    "max_possible_score": 9,
+    "reasons": [
+      "HTF bias: bullish",
+      "Liquidity sweep detected",
+      "SMT divergence vs EUR/USD",
+      "Displacement candle present",
+      "Longer-term H4 trend confirms direction"
+    ],
+    "opened_at_candle_time": "2026-10-01 01:45:00"
+  }
+]
