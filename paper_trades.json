@@ -1,11 +1,11 @@
 [
   {
-    "signal_id": "GBPUSD-20261001023000",
+    "signal_id": "GBPUSD-20261001030000",
     "symbol": "GBP/USD",
     "direction": "long",
-    "entry": 1.32569,
-    "stop": 1.32539,
-    "target": 1.32659,
+    "entry": 1.32558,
+    "stop": 1.32525,
+    "target": 1.3265699999999998,
     "rr": 3.0,
     "score": 6,
     "score_normalized": 67,
@@ -16,6 +16,6 @@
       "SMT divergence vs EUR/USD",
       "Longer-term H4 trend confirms direction"
     ],
-    "opened_at_candle_time": "2026-10-01 02:30:00"
+    "opened_at_candle_time": "2026-10-01 03:00:00"
   }
 ]
