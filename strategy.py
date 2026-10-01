@@ -17,6 +17,8 @@ with real money - to see if this approximation actually works.
 from dataclasses import dataclass
 from typing import List, Dict, Optional
 
+from config import RR_MULTIPLE
+
 
 @dataclass
 class Setup:
@@ -53,6 +55,29 @@ def get_htf_bias(h4_candles: List[Dict]) -> str:
     elif diff < -threshold:
         return "bearish"
     return "neutral"
+
+
+def detect_trend_confirmation(h4_candles: List[Dict], direction: str) -> bool:
+    """
+    Checks for a genuine LONGER-term trend behind the setup, on top of
+    get_htf_bias's quicker 10-candle read - compares the average close
+    of the last 20 H4 candles against the 20 before that. Rewards
+    setups that also have real underlying trend momentum behind them
+    (particularly relevant for trend-heavy instruments like commodities)
+    without requiring it - this is a scoring bonus, not a hard gate.
+    """
+    if len(h4_candles) < 40:
+        return False  # not enough history to judge a genuine longer-term trend
+
+    recent = h4_candles[-20:]
+    older = h4_candles[-40:-20]
+    recent_avg = sum(c["close"] for c in recent) / len(recent)
+    older_avg = sum(c["close"] for c in older) / len(older)
+    slope = recent_avg - older_avg
+
+    if direction == "long":
+        return slope > 0
+    return slope < 0
 
 
 # ---------- 2. Liquidity sweep ----------
@@ -165,17 +190,23 @@ def detect_displacement(m15_candles: List[Dict]) -> bool:
 # ---------- 6. Trade levels ----------
 
 def compute_trade_levels(m15_candles: List[Dict], direction: str):
+    """
+    Fixed 1:RR_MULTIPLE every time (default 3.0), targeting resting
+    liquidity at that distance from entry - per direct request to
+    keep it simple and consistent rather than a capped liquidity-pool
+    range. The stop is based on the swept structure, as before.
+    """
     entry = m15_candles[-1]["close"]
     lookback = m15_candles[-20:]
 
     if direction == "long":
         stop = min(c["low"] for c in lookback)
         risk = entry - stop
-        target = entry + risk * 3  # aiming for ~1:3, adjust via MIN_RR check
+        target = entry + risk * RR_MULTIPLE
     else:
         stop = max(c["high"] for c in lookback)
         risk = stop - entry
-        target = entry - risk * 3
+        target = entry - risk * RR_MULTIPLE
 
     if risk <= 0:
         return None
@@ -217,6 +248,10 @@ def evaluate_setup(symbol_h4, symbol_m15, comparison_m15, min_score: int, min_rr
         score += 1
         reasons.append("Displacement candle present")
 
+    if detect_trend_confirmation(symbol_h4, direction):
+        score += 1
+        reasons.append("Longer-term H4 trend confirms direction")
+
     if score < min_score:
         return None
 
@@ -230,11 +265,11 @@ def evaluate_setup(symbol_h4, symbol_m15, comparison_m15, min_score: int, min_rr
 
     # Normalized 0-100 score: raw score relative to what's actually
     # achievable for THIS pair. A pair with no SMT comparison symbol
-    # has a lower max_possible_score (6 vs 8) - normalizing makes
-    # scores genuinely comparable across pairs with different-sized
+    # has a lower max_possible_score, so normalizing makes scores
+    # genuinely comparable across pairs with different-sized
     # confluence pools, instead of penalizing a pair for a condition
     # that structurally isn't available to it.
-    max_possible_score = 1 + 2 + (2 if comparison_m15 is not None else 0) + 2 + 1
+    max_possible_score = 1 + 2 + (2 if comparison_m15 is not None else 0) + 2 + 1 + 1
     score_normalized = round(score / max_possible_score * 100)
 
     return Setup(
@@ -247,4 +282,5 @@ def evaluate_setup(symbol_h4, symbol_m15, comparison_m15, min_score: int, min_rr
         stop=stop,
         target=target,
         rr=rr,
-    )
+)
+    
