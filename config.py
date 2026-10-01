@@ -20,19 +20,22 @@ SYMBOL = os.getenv("SYMBOL", "EUR/USD")
 SMT_SYMBOL = os.getenv("SMT_SYMBOL", "GBP/USD")
 
 # --- All pairs the bot scans ---
-# Each entry: symbol, smt_comparison_symbol_or_None, min_score_or_None.
-# If smt_symbol is None, that pair skips the SMT confluence check and
-# scores on the other confluences instead - which shrinks its maximum
-# possible score (6 instead of 8), so min_score is calibrated down
-# proportionally for those pairs to keep the same relative "how much
-# real confluence is required" bar as pairs that DO have SMT. A
-# min_score of None means "use the global MIN_SCORE default".
+# Updated per the "High-Win-Rate Execution Model" spec: three primary
+# assets (EUR/USD, GBP/USD, XAU/USD), dropping USD/JPY. EUR/USD and
+# GBP/USD are now MUTUAL SMT partners (each is scored using the other
+# as its comparison pair, not just EUR/USD referencing GBP/USD
+# one-way). XAU/USD still has no SMT partner - Silver is paid-tier
+# only on TwelveData's free plan - so its min_score is calibrated
+# proportionally lower (see strategy.py's normalized scoring).
 PAIRS = [
-    {"symbol": SYMBOL, "smt_symbol": SMT_SYMBOL, "min_score": None},  # EUR/USD vs GBP/USD
-    {"symbol": "XAU/USD", "smt_symbol": None, "min_score": 4},  # Gold - no free-tier SMT partner (Silver needs paid plan);
-                                                                  # min_score=4 keeps ~same proportional bar as EURUSD's default 5-of-8 (5/8=62.5%; 4/6=~67%)
-    {"symbol": "USD/JPY", "smt_symbol": "EUR/JPY", "min_score": None},  # EUR/JPY as a genuine correlated SMT partner
-                                                                          # (unconfirmed on free TwelveData plan until first real run - watch scan_health.jsonl)
+    {"symbol": "EUR/USD", "smt_symbol": "GBP/USD", "min_score": None},
+    {"symbol": "GBP/USD", "smt_symbol": "EUR/USD", "min_score": None},
+    {"symbol": "XAU/USD", "smt_symbol": None, "min_score": 4},
+    {"symbol": "WTI/USD", "smt_symbol": None, "min_score": 4},  # Crude Oil - confirmed available
+                                                                   # on TwelveData's free Basic plan.
+                                                                   # No confirmed SMT partner (Brent
+                                                                   # untested) - same calibrated
+                                                                   # threshold treatment as XAU/USD.
 ]
 
 # --- Market hours guard ---
@@ -42,7 +45,22 @@ ENFORCE_MARKET_HOURS = os.getenv("ENFORCE_MARKET_HOURS", "true").lower() == "tru
 FRIDAY_CLOSE_HOUR_UTC = int(os.getenv("FRIDAY_CLOSE_HOUR_UTC", "21"))
 SUNDAY_OPEN_HOUR_UTC = int(os.getenv("SUNDAY_OPEN_HOUR_UTC", "22"))
 
+# --- Trading session window ---
+# Per the execution model: zero execution outside these official
+# liquidity sessions. London and New York, in UTC.
+ENFORCE_SESSION_WINDOW = os.getenv("ENFORCE_SESSION_WINDOW", "true").lower() == "true"
+LONDON_SESSION_START_UTC = int(os.getenv("LONDON_SESSION_START_UTC", "7"))
+LONDON_SESSION_END_UTC = int(os.getenv("LONDON_SESSION_END_UTC", "10"))
+NY_SESSION_START_UTC = int(os.getenv("NY_SESSION_START_UTC", "12"))
+NY_SESSION_END_UTC = int(os.getenv("NY_SESSION_END_UTC", "15"))
+
 # --- Strategy settings ---
+# Reverted to a fixed 1:3 risk/reward every time, per direct request -
+# target resting liquidity at 3x the stop distance, not a capped
+# liquidity-pool range. Since the target is always built as exactly
+# risk*RR_MULTIPLE, MIN_RR will always pass when risk>0 - it's kept as
+# a sanity floor, not an active filter.
+RR_MULTIPLE = float(os.getenv("RR_MULTIPLE", "3.0"))
 MIN_RR = float(os.getenv("MIN_RR", "2.0"))
 # MIN_SCORE: threshold out of a max of 8 (EUR/USD, which has an SMT
 # partner) or 6 (XAU/USD, USD/JPY, which don't). Lowered from 6 to 5
@@ -113,6 +131,25 @@ TRADE_HISTORY_FILE = os.getenv("TRADE_HISTORY_FILE", "trade_history.jsonl")
 # Caps the closed-trade history so it doesn't grow forever.
 TRADE_HISTORY_MAX_LINES = int(os.getenv("TRADE_HISTORY_MAX_LINES", "1000"))
 
+# --- Risk / account-protection circuit breaker ---
+# Per the execution model's risk rules. This does NOT manage real
+# money (this is still a signal bot, not live execution) - it
+# controls whether NEW signals are generated at all, based on your
+# REAL tracked paper-trade outcomes. Already-open trades and already
+# -pending Telegram retries are never blocked by this - it only gates
+# the creation of new signals going forward.
+# Set to "false" by default - the daily/weekly loss stops and weekly
+# signal cap were unverified numbers (never confirmed as a proven
+# trader's rule, just an unread AI-generated spec) - disabled per
+# request so the system generates a signal any time the strategy
+# genuinely finds one, same as the version that produced the real
+# 24-trade / +24R track record. The circuit breaker code itself is
+# kept intact (not deleted) in case you want to turn it back on later.
+ENFORCE_RISK_GUARD = os.getenv("ENFORCE_RISK_GUARD", "false").lower() == "true"
+DAILY_MAX_LOSSES = int(os.getenv("DAILY_MAX_LOSSES", "1"))    # 1 loss = stop for the day
+WEEKLY_MAX_LOSSES = int(os.getenv("WEEKLY_MAX_LOSSES", "2"))   # 2 losses = stop for the week
+WEEKLY_MAX_SIGNALS = int(os.getenv("WEEKLY_MAX_SIGNALS", "3"))  # selectivity constraint: 1-3 setups/week, capped at 3
+
 # --- Sanity check on startup ---
 def check_config():
     missing = []
@@ -126,4 +163,4 @@ def check_config():
         raise RuntimeError(
             f"Missing required environment variables: {', '.join(missing)}. "
             "Set these as GitHub Actions repository secrets."
-        )
+)
