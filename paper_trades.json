@@ -18,44 +18,6 @@
     "opened_at_candle_time": "2026-10-02 06:30:00"
   },
   {
-    "signal_id": "EURUSD-20261002123000",
-    "symbol": "EUR/USD",
-    "direction": "short",
-    "entry": 1.12396,
-    "stop": 1.12685,
-    "target": 1.1152900000000006,
-    "rr": 3.0,
-    "score": 5,
-    "score_normalized": 56,
-    "max_possible_score": 9,
-    "reasons": [
-      "HTF bias: bearish",
-      "Retracement into FVG/IFVG zone",
-      "Displacement candle present",
-      "Longer-term H4 trend confirms direction"
-    ],
-    "opened_at_candle_time": "2026-10-02 12:30:00"
-  },
-  {
-    "signal_id": "GBPUSD-20261002123000",
-    "symbol": "GBP/USD",
-    "direction": "short",
-    "entry": 1.32259,
-    "stop": 1.32368,
-    "target": 1.3193199999999998,
-    "rr": 3.0,
-    "score": 5,
-    "score_normalized": 56,
-    "max_possible_score": 9,
-    "reasons": [
-      "HTF bias: bearish",
-      "SMT divergence vs EUR/USD",
-      "Displacement candle present",
-      "Longer-term H4 trend confirms direction"
-    ],
-    "opened_at_candle_time": "2026-10-02 12:30:00"
-  },
-  {
     "signal_id": "XAUUSD-20261002123000",
     "symbol": "XAU/USD",
     "direction": "long",
@@ -72,25 +34,6 @@
       "Displacement candle present"
     ],
     "opened_at_candle_time": "2026-10-02 12:30:00"
-  },
-  {
-    "signal_id": "EURUSD-20261002130000",
-    "symbol": "EUR/USD",
-    "direction": "short",
-    "entry": 1.12544,
-    "stop": 1.12633,
-    "target": 1.1227699999999998,
-    "rr": 3.0,
-    "score": 6,
-    "score_normalized": 67,
-    "max_possible_score": 9,
-    "reasons": [
-      "HTF bias: bearish",
-      "Liquidity sweep detected",
-      "SMT divergence vs GBP/USD",
-      "Longer-term H4 trend confirms direction"
-    ],
-    "opened_at_candle_time": "2026-10-02 13:00:00"
   },
   {
     "signal_id": "XAUUSD-20261002130000",
