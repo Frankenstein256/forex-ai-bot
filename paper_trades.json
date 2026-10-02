@@ -1,23 +1,5 @@
 [
   {
-    "signal_id": "XAUUSD-20261002063000",
-    "symbol": "XAU/USD",
-    "direction": "long",
-    "entry": 4181.15923,
-    "stop": 4145.82074,
-    "target": 4287.1747000000005,
-    "rr": 3.0,
-    "score": 4,
-    "score_normalized": 57,
-    "max_possible_score": 7,
-    "reasons": [
-      "HTF bias: bullish",
-      "Retracement into FVG/IFVG zone",
-      "Displacement candle present"
-    ],
-    "opened_at_candle_time": "2026-10-02 06:30:00"
-  },
-  {
     "signal_id": "GBPUSD-20261002144500",
     "symbol": "GBP/USD",
     "direction": "short",
