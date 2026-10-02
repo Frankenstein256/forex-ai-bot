@@ -18,67 +18,12 @@
     "opened_at_candle_time": "2026-10-01 10:30:00"
   },
   {
-    "signal_id": "XAUUSD-20261001151500",
-    "symbol": "XAU/USD",
-    "direction": "short",
-    "entry": 4166.79434,
-    "stop": 4187.19446,
-    "target": 4105.593980000002,
-    "rr": 3.0,
-    "score": 5,
-    "score_normalized": 71,
-    "max_possible_score": 7,
-    "reasons": [
-      "HTF bias: bearish",
-      "Retracement into FVG/IFVG zone",
-      "Displacement candle present",
-      "Longer-term H4 trend confirms direction"
-    ],
-    "opened_at_candle_time": "2026-10-01 15:15:00"
-  },
-  {
-    "signal_id": "XAUUSD-20261001153000",
-    "symbol": "XAU/USD",
-    "direction": "short",
-    "entry": 4167.57827,
-    "stop": 4187.19446,
-    "target": 4108.729700000001,
-    "rr": 3.0,
-    "score": 4,
-    "score_normalized": 57,
-    "max_possible_score": 7,
-    "reasons": [
-      "HTF bias: bearish",
-      "Retracement into FVG/IFVG zone",
-      "Longer-term H4 trend confirms direction"
-    ],
-    "opened_at_candle_time": "2026-10-01 15:30:00"
-  },
-  {
-    "signal_id": "XAUUSD-20261001161500",
-    "symbol": "XAU/USD",
-    "direction": "short",
-    "entry": 4166.57619,
-    "stop": 4187.19446,
-    "target": 4104.72138,
-    "rr": 3.0,
-    "score": 4,
-    "score_normalized": 57,
-    "max_possible_score": 7,
-    "reasons": [
-      "HTF bias: bearish",
-      "Retracement into FVG/IFVG zone",
-      "Longer-term H4 trend confirms direction"
-    ],
-    "opened_at_candle_time": "2026-10-01 16:15:00"
-  },
-  {
-    "signal_id": "GBPUSD-20261002040000",
+    "signal_id": "GBPUSD-20261002041500",
     "symbol": "GBP/USD",
     "direction": "short",
-    "entry": 1.32096,
-    "stop": 1.32116,
-    "target": 1.32036,
+    "entry": 1.32112,
+    "stop": 1.32118,
+    "target": 1.3209400000000002,
     "rr": 3.0,
     "score": 6,
     "score_normalized": 67,
@@ -89,6 +34,6 @@
       "SMT divergence vs EUR/USD",
       "Longer-term H4 trend confirms direction"
     ],
-    "opened_at_candle_time": "2026-10-02 04:00:00"
+    "opened_at_candle_time": "2026-10-02 04:15:00"
   }
 ]
