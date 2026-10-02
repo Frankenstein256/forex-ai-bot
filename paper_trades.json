@@ -91,5 +91,24 @@
       "Longer-term H4 trend confirms direction"
     ],
     "opened_at_candle_time": "2026-10-02 00:00:00"
+  },
+  {
+    "signal_id": "GBPUSD-20261002020000",
+    "symbol": "GBP/USD",
+    "direction": "short",
+    "entry": 1.3194,
+    "stop": 1.3201,
+    "target": 1.3172999999999995,
+    "rr": 3.0,
+    "score": 5,
+    "score_normalized": 56,
+    "max_possible_score": 9,
+    "reasons": [
+      "HTF bias: bearish",
+      "Retracement into FVG/IFVG zone",
+      "Displacement candle present",
+      "Longer-term H4 trend confirms direction"
+    ],
+    "opened_at_candle_time": "2026-10-02 02:00:00"
   }
 ]
