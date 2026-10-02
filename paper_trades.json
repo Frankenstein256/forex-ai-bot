@@ -16,24 +16,5 @@
       "Longer-term H4 trend confirms direction"
     ],
     "opened_at_candle_time": "2026-10-01 10:30:00"
-  },
-  {
-    "signal_id": "GBPUSD-20261002041500",
-    "symbol": "GBP/USD",
-    "direction": "short",
-    "entry": 1.32112,
-    "stop": 1.32118,
-    "target": 1.3209400000000002,
-    "rr": 3.0,
-    "score": 6,
-    "score_normalized": 67,
-    "max_possible_score": 9,
-    "reasons": [
-      "HTF bias: bearish",
-      "Liquidity sweep detected",
-      "SMT divergence vs EUR/USD",
-      "Longer-term H4 trend confirms direction"
-    ],
-    "opened_at_candle_time": "2026-10-02 04:15:00"
   }
 ]
