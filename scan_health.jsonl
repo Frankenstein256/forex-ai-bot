@@ -1,4 +1,3 @@
-{"scan_time": "2026-10-02 01:30:12", "symbol": "EUR/USD", "candle_time": "2026-10-02 01:15:00", "api_status": "ok", "setup_found": false, "telegram_status": "not_applicable", "trades_resolved": 0, "min_score_used": 5}
 {"scan_time": "2026-10-02 01:30:12", "symbol": "GBP/USD", "candle_time": "2026-10-02 01:15:00", "api_status": "ok", "setup_found": false, "telegram_status": "not_applicable", "trades_resolved": 0, "min_score_used": 5}
 {"scan_time": "2026-10-02 01:30:12", "symbol": "XAU/USD", "candle_time": "2026-10-02 01:15:00", "api_status": "ok", "setup_found": false, "telegram_status": "not_applicable", "trades_resolved": 0, "min_score_used": 4}
 {"scan_time": "2026-10-02 01:30:12", "symbol": "WTI/USD", "candle_time": null, "api_status": "error", "setup_found": false, "telegram_status": "not_applicable", "trades_resolved": 0, "min_score_used": 4, "error": "TwelveData error for WTI/USD 15min: This symbol is available starting with the Grow or Venture plan. Consider upgrading now at https://twelvedata.com/pricing"}
@@ -498,3 +497,4 @@
 {"scan_time": "2026-10-04 14:00:14", "symbol": "ALL", "candle_time": null, "api_status": "market_closed", "setup_found": false, "telegram_status": "not_applicable", "trades_resolved": 0}
 {"scan_time": "2026-10-04 14:15:46", "symbol": "ALL", "candle_time": null, "api_status": "market_closed", "setup_found": false, "telegram_status": "not_applicable", "trades_resolved": 0}
 {"scan_time": "2026-10-04 14:30:12", "symbol": "ALL", "candle_time": null, "api_status": "market_closed", "setup_found": false, "telegram_status": "not_applicable", "trades_resolved": 0}
+{"scan_time": "2026-10-04 14:45:11", "symbol": "ALL", "candle_time": null, "api_status": "market_closed", "setup_found": false, "telegram_status": "not_applicable", "trades_resolved": 0}
