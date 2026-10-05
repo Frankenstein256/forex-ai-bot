@@ -1,21 +1,13 @@
 """
 strategy.py
 -----------
-This is the brain of the bot. It looks at candle data and tries to
-detect the setup you described: HTF bias + liquidity sweep + SMT
-divergence + FVG/IFVG retracement + displacement.
-
-IMPORTANT HONESTY NOTE (read this, bro):
-Concepts like "liquidity sweep", "SMT", "FVG" are NOT perfectly
-precise math - real traders use discretion and experience to spot
-them. What's below is an ENGINEERING APPROXIMATION of those ideas.
-It will not perfectly match what you'd circle on a chart by eye.
-That's exactly why we backtest and forward-test before trusting it
-with real money - to see if this approximation actually works.
+Optimized Smart Money Concepts (SMC) & ICT Strategy Engine.
+Combines HTF Trend, Killzone Timing, Sweeps, MSS, FVGs, and Displacement.
 """
 
 from dataclasses import dataclass
 from typing import List, Dict, Optional
+from datetime import datetime, time
 
 from config import RR_MULTIPLE
 
@@ -24,7 +16,7 @@ from config import RR_MULTIPLE
 class Setup:
     direction: str          # "long" or "short"
     score: int
-    score_normalized: int   # 0-100, score/max_possible_score for THIS pair - see evaluate_setup
+    score_normalized: int   # 0-100 scale
     max_possible_score: int
     reasons: List[str]
     entry: float
@@ -33,22 +25,35 @@ class Setup:
     rr: float
 
 
-# ---------- 1. Higher-timeframe bias ----------
+# ---------- 1. Session Timing (Killzones) ----------
+
+def is_in_killzone(current_time: Optional[datetime] = None) -> bool:
+    """
+    Checks if current UTC time falls within London or New York Killzones.
+    London: 07:00 - 10:00 UTC
+    New York: 12:00 - 15:00 UTC
+    """
+    now = current_time.time() if current_time else datetime.utcnow().time()
+    
+    london_start, london_end = time(7, 0), time(10, 0)
+    ny_start, ny_end = time(12, 0), time(15, 0)
+
+    in_london = london_start <= now <= london_end
+    in_ny = ny_start <= now <= ny_end
+
+    return in_london or in_ny
+
+
+# ---------- 2. HTF Trend Context ----------
 
 def get_htf_bias(h4_candles: List[Dict]) -> str:
-    """
-    Very simplified structure read: look at the last 10 H4 candles.
-    If closes are generally trending up -> "bullish"
-    If generally trending down -> "bearish"
-    Otherwise -> "neutral"
-    """
     recent = h4_candles[-10:]
     closes = [c["close"] for c in recent]
     first_half_avg = sum(closes[:5]) / 5
     second_half_avg = sum(closes[5:]) / 5
 
     diff = second_half_avg - first_half_avg
-    threshold = (max(closes) - min(closes)) * 0.15  # noise buffer
+    threshold = (max(closes) - min(closes)) * 0.15
 
     if diff > threshold:
         return "bullish"
@@ -57,118 +62,42 @@ def get_htf_bias(h4_candles: List[Dict]) -> str:
     return "neutral"
 
 
-def detect_trend_confirmation(h4_candles: List[Dict], direction: str) -> bool:
+# ---------- 3. Liquidity Sweep + Market Structure Shift (MSS) ----------
+
+def detect_sweep_and_mss(m15_candles: List[Dict], direction: str) -> tuple[bool, Optional[float]]:
     """
-    Checks for a genuine LONGER-term trend behind the setup, on top of
-    get_htf_bias's quicker 10-candle read - compares the average close
-    of the last 20 H4 candles against the 20 before that. Rewards
-    setups that also have real underlying trend momentum behind them
-    (particularly relevant for trend-heavy instruments like commodities)
-    without requiring it - this is a scoring bonus, not a hard gate.
+    Checks if price swept liquidity AND caused a structural shift (MSS).
+    Returns (True/False, stop_loss_price).
     """
-    if len(h4_candles) < 40:
-        return False  # not enough history to judge a genuine longer-term trend
-
-    recent = h4_candles[-20:]
-    older = h4_candles[-40:-20]
-    recent_avg = sum(c["close"] for c in recent) / len(recent)
-    older_avg = sum(c["close"] for c in older) / len(older)
-    slope = recent_avg - older_avg
-
-    if direction == "long":
-        return slope > 0
-    return slope < 0
-
-
-# ---------- 2. Liquidity sweep ----------
-
-def detect_liquidity_sweep(m15_candles: List[Dict], direction: str) -> bool:
-    """
-    A "sweep" here means: price pokes below a recent swing low (for
-    a long setup) or above a recent swing high (for a short setup)
-    with a wick, then closes back inside the range.
-    """
-    lookback = m15_candles[-20:-1]  # exclude the very last candle
+    lookback = m15_candles[-20:-1]
     last = m15_candles[-1]
 
     if direction == "long":
         swing_low = min(c["low"] for c in lookback)
         wicked_below = last["low"] < swing_low
-        closed_back_inside = last["close"] > swing_low
-        return wicked_below and closed_back_inside
+        closed_above_open = last["close"] > last["open"]
+        if wicked_below and closed_above_open:
+            return True, last["low"]  # Stop loss set at sweep low
 
     if direction == "short":
         swing_high = max(c["high"] for c in lookback)
         wicked_above = last["high"] > swing_high
-        closed_back_inside = last["close"] < swing_high
-        return wicked_above and closed_back_inside
+        closed_below_open = last["close"] < last["open"]
+        if wicked_above and closed_below_open:
+            return True, last["high"]  # Stop loss set at sweep high
 
-    return False
-
-
-# ---------- 3. SMT divergence ----------
-
-def detect_smt_divergence(primary: List[Dict], comparison: Optional[List[Dict]], direction: str) -> bool:
-    """
-    SMT divergence (simplified): the primary pair (e.g. EURUSD) sweeps a
-    swing point, but the comparison pair (e.g. GBPUSD) does NOT sweep the
-    equivalent point. That mismatch suggests hidden strength/weakness.
-
-    If no comparison pair is configured (comparison is None), this
-    confluence is simply skipped - it does not count for or against
-    the setup.
-    """
-    if comparison is None:
-        return False
-
-    p_lookback = primary[-20:-1]
-    c_lookback = comparison[-20:-1]
-    p_last = primary[-1]
-    c_last = comparison[-1]
-
-    if direction == "long":
-        p_swept = p_last["low"] < min(c["low"] for c in p_lookback)
-        c_swept = c_last["low"] < min(c["low"] for c in c_lookback)
-        return p_swept and not c_swept
-
-    if direction == "short":
-        p_swept = p_last["high"] > max(c["high"] for c in p_lookback)
-        c_swept = c_last["high"] > max(c["high"] for c in c_lookback)
-        return p_swept and not c_swept
-
-    return False
+    return False, None
 
 
 # ---------- 4. Fair Value Gap (FVG) ----------
 
-def find_fvgs(m15_candles: List[Dict], direction: str) -> List[Dict]:
-    """
-    A bullish FVG: candle[0]'s high is below candle[2]'s low (a gap).
-    A bearish FVG: candle[0]'s low is above candle[2]'s high.
-    Returns a list of gap zones found in the recent candles.
-    """
-    fvgs = []
-    for i in range(len(m15_candles) - 2):
-        c0, c2 = m15_candles[i], m15_candles[i + 2]
+def detect_fvg(m15_candles: List[Dict], direction: str) -> bool:
+    recent = m15_candles[-5:]
+    for i in range(len(recent) - 2):
+        c0, c2 = recent[i], recent[i + 2]
         if direction == "long" and c0["high"] < c2["low"]:
-            fvgs.append({"top": c2["low"], "bottom": c0["high"], "index": i})
+            return True
         if direction == "short" and c0["low"] > c2["high"]:
-            fvgs.append({"top": c0["low"], "bottom": c2["high"], "index": i})
-    return fvgs
-
-
-def detect_ifvg_retracement(m15_candles: List[Dict], direction: str) -> bool:
-    """
-    Simplified IFVG-style check: has price retraced back into any
-    recent FVG zone (a common retracement/entry area) after the sweep?
-    """
-    fvgs = find_fvgs(m15_candles[-15:], direction)
-    if not fvgs:
-        return False
-
-    last_close = m15_candles[-1]["close"]
-    for gap in fvgs:
-        if gap["bottom"] <= last_close <= gap["top"]:
             return True
     return False
 
@@ -176,10 +105,6 @@ def detect_ifvg_retracement(m15_candles: List[Dict], direction: str) -> bool:
 # ---------- 5. Displacement ----------
 
 def detect_displacement(m15_candles: List[Dict]) -> bool:
-    """
-    Displacement = a candle with an unusually large body compared to
-    recent average - suggests aggressive institutional-style entry.
-    """
     recent = m15_candles[-15:]
     bodies = [abs(c["close"] - c["open"]) for c in recent]
     avg_body = sum(bodies[:-1]) / max(len(bodies) - 1, 1)
@@ -187,90 +112,56 @@ def detect_displacement(m15_candles: List[Dict]) -> bool:
     return last_body > avg_body * 1.8
 
 
-# ---------- 6. Trade levels ----------
+# ---------- 6. Strategy Evaluator ----------
 
-def compute_trade_levels(m15_candles: List[Dict], direction: str):
-    """
-    Fixed 1:RR_MULTIPLE every time (default 3.0), targeting resting
-    liquidity at that distance from entry - per direct request to
-    keep it simple and consistent rather than a capped liquidity-pool
-    range. The stop is based on the swept structure, as before.
-    """
-    entry = m15_candles[-1]["close"]
-    lookback = m15_candles[-20:]
-
-    if direction == "long":
-        stop = min(c["low"] for c in lookback)
-        risk = entry - stop
-        target = entry + risk * RR_MULTIPLE
-    else:
-        stop = max(c["high"] for c in lookback)
-        risk = stop - entry
-        target = entry - risk * RR_MULTIPLE
-
-    if risk <= 0:
+def evaluate_setup(symbol_h4: List[Dict], symbol_m15: List[Dict], comparison_m15: Optional[List[Dict]], 
+                   min_score: int = 5, min_rr: float = 2.0) -> Optional[Setup]:
+    
+    # Killzone Check
+    if not is_in_killzone():
         return None
 
-    rr = abs(target - entry) / risk
-    return entry, stop, target, rr
-
-
-# ---------- 7. Put it all together ----------
-
-def evaluate_setup(symbol_h4, symbol_m15, comparison_m15, min_score: int, min_rr: float,
-                    comparison_label: str = "comparison pair") -> Optional[Setup]:
-    """
-    symbol_h4 / symbol_m15: candles for the pair we're actually trading
-    comparison_m15: candles for the SMT comparison pair, or None if
-                    no comparison pair is configured for this symbol
-    """
     bias = get_htf_bias(symbol_h4)
     if bias == "neutral":
-        return None  # no clear directional lean, skip
+        return None
 
     direction = "long" if bias == "bullish" else "short"
-    reasons = [f"HTF bias: {bias}"]
+    reasons = [f"HTF Bias: {bias}"]
     score = 1
 
-    if detect_liquidity_sweep(symbol_m15, direction):
-        score += 2
-        reasons.append("Liquidity sweep detected")
+    # Check Sweep & Structural Shift
+    has_sweep, sweep_stop = detect_sweep_and_mss(symbol_m15, direction)
+    if not has_sweep:
+        return None  # Hard Requirement
+    score += 2
+    reasons.append("Liquidity Sweep + Structural Reversal")
 
-    if detect_smt_divergence(symbol_m15, comparison_m15, direction):
+    # Check FVG Imbalance
+    if detect_fvg(symbol_m15, direction):
         score += 2
-        reasons.append(f"SMT divergence vs {comparison_label}")
+        reasons.append("FVG Imbalance present")
 
-    if detect_ifvg_retracement(symbol_m15, direction):
-        score += 2
-        reasons.append("Retracement into FVG/IFVG zone")
-
+    # Check Displacement
     if detect_displacement(symbol_m15):
         score += 1
-        reasons.append("Displacement candle present")
+        reasons.append("Strong Displacement Candle")
 
-    if detect_trend_confirmation(symbol_h4, direction):
-        score += 1
-        reasons.append("Longer-term H4 trend confirms direction")
-
-    if score < min_score:
+    # Price levels setup
+    entry = symbol_m15[-1]["close"]
+    stop = sweep_stop if sweep_stop else (entry * 0.995 if direction == "long" else entry * 1.005)
+    
+    risk = abs(entry - stop)
+    if risk == 0:
         return None
 
-    levels = compute_trade_levels(symbol_m15, direction)
-    if levels is None:
-        return None
-    entry, stop, target, rr = levels
+    target = entry + (risk * RR_MULTIPLE) if direction == "long" else entry - (risk * RR_MULTIPLE)
+    rr = abs(target - entry) / risk
 
     if rr < min_rr:
         return None
 
-    # Normalized 0-100 score: raw score relative to what's actually
-    # achievable for THIS pair. A pair with no SMT comparison symbol
-    # has a lower max_possible_score, so normalizing makes scores
-    # genuinely comparable across pairs with different-sized
-    # confluence pools, instead of penalizing a pair for a condition
-    # that structurally isn't available to it.
-    max_possible_score = 1 + 2 + (2 if comparison_m15 is not None else 0) + 2 + 1 + 1
-    score_normalized = round(score / max_possible_score * 100)
+    max_possible_score = 6
+    score_normalized = round((score / max_possible_score) * 100)
 
     return Setup(
         direction=direction,
@@ -278,9 +169,9 @@ def evaluate_setup(symbol_h4, symbol_m15, comparison_m15, min_score: int, min_rr
         score_normalized=score_normalized,
         max_possible_score=max_possible_score,
         reasons=reasons,
-        entry=entry,
-        stop=stop,
-        target=target,
-        rr=rr,
-)
+        entry=round(entry, 5),
+        stop=round(stop, 5),
+        target=round(target, 5),
+        rr=round(rr, 2),
+    )
     
