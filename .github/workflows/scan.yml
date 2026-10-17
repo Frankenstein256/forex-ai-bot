@@ -1,59 +1,31 @@
-name: Forex Signal Scan
+name: Phase Engine AI Cron Scanner
 
-# Runs automatically every 15 minutes, all day, every day.
-# You can also trigger it manually from the "Actions" tab on GitHub
-# using the "Run workflow" button (workflow_dispatch below).
 on:
   schedule:
-    - cron: "*/15 * * * *"
-  workflow_dispatch:
-
-# This gives the workflow permission to push changes (like the
-# updated state.json) back to the repo. Without this, GitHub only
-# allows read access by default and the final step fails.
-permissions:
-  contents: write
-
-# Prevents two runs from overlapping and racing to push state files.
-# If a run is still going when the next one would start, the new one
-# waits in queue instead of running in parallel and corrupting state.
-concurrency:
-  group: forex-signal-scan
-  cancel-in-progress: false
+    # Runs every 15 minutes during market weekdays
+    - cron: '*/15 * * * 1-5'
+  workflow_dispatch: # Enables manual triggering via 'Run workflow' button
 
 jobs:
-  scan:
+  run-scanner:
     runs-on: ubuntu-latest
     steps:
-      - name: Check out the repo
+      - name: Checkout Repository
         uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - name: Setup Python
+        uses: actions/python-version@v5
         with:
-          python-version: "3.12"
+          python-version: '3.10'
 
-      - name: Install dependencies
-        run: pip install -r requirements.txt
+      - name: Install Python Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
 
-      - name: Run the scan
+      - name: Execute Phase Engine Scanner
         env:
-          TWELVEDATA_API_KEY: ${{ secrets.TWELVEDATA_API_KEY }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-        run: python run_once.py
-
-      - name: Save any updated bot state back to the repo
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          for f in state.json pending_signals.json h4_cache.json scan_health.jsonl paper_trades.json trade_history.jsonl; do
-            if [ -f "$f" ]; then
-              git add "$f"
-            else
-              echo "Note: $f does not exist yet, skipping (this is fine on a fresh setup)."
-            fi
-          done
-          git diff --staged --quiet || git commit -m "Update bot state [skip ci]"
-          git push
-          
+        run: python main.py
+        
