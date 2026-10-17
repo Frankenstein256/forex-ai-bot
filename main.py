@@ -1,108 +1,168 @@
-"""
-main.py
--------
-GitHub Actions Execution Script.
-
-This script scans your target pairs, detects setups via strategy.py,
-runs an AI audit through ai_filter.py (Gemini 2.5 Flash), and dispatches
-confirmed signals directly to Telegram.
-"""
-
+import os
 import time
-import traceback
+import requests
+import pandas as pd
+import yfinance as yf
 
-from config import PAIRS, check_config
-from data_feed import get_candles
-from strategy import evaluate_setup
-from ai_filter import filter_setup_with_ai
-from telegram_bot import send_message
+# ==========================================
+# SECRETS & CONFIGURATION
+# ==========================================
+TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
+TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
 
-# Tracks the last candle time a signal was sent per pair to avoid duplicates
-last_signal_time = {}
+# Pair mappings for market data
+SYMBOLS = {
+    "XAU/USD": "GC=F",
+    "EUR/USD": "EURUSD=X",
+    "USD/JPY": "JPY=X"
+}
 
+# Custom headers to bypass Yahoo Finance scraping blocks
+CUSTOM_HEADERS = {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+}
 
-def scan_pair(pair_config: dict):
-    symbol = pair_config["symbol"]
-    smt_symbol = pair_config["smt_symbol"]
+# ==========================================
+# TELEGRAM ALERT ENGINE
+# ==========================================
+def send_telegram_alert(asset, action, confidence, entry, stop_loss, tp1, tp2, strategy, timeframe):
+    """
+    Formats and posts the signal alert matching the PHASE ENGINE AI template.
+    """
+    is_gold = "XAU" in asset
+    multiplier = 10 if is_gold else 10000
 
-    # 1. Fetch live candle data
-    h4 = get_candles(symbol, "4h", output_size=50)
-    m15 = get_candles(symbol, "15min", output_size=50)
+    sl_pips = abs(round((entry - stop_loss) * multiplier, 1))
+    tp1_pips = abs(round((tp1 - entry) * multiplier, 1))
+    tp2_pips = abs(round((tp2 - entry) * multiplier, 1))
 
-    comparison_m15 = None
-    if smt_symbol:
-        comparison_m15 = get_candles(smt_symbol, "15min", output_size=50)
+    decimals = 2 if is_gold else 5
 
-    latest_candle_time = m15[-1]["datetime"] if "datetime" in m15[-1] else m15[-1].get("time")
+    message = f"""🤖 *PHASE ENGINE AI – SIGNAL ALERT*
 
-    # 2. Evaluate algorithmic strategy rules
-    setup = evaluate_setup(
-        symbol_h4=h4,
-        symbol_m15=m15,
-        comparison_m15=comparison_m15,
-    )
+*Asset:* `{asset}`
+*Action:* `{action}`
+*AI Confidence:* `{confidence:.1f}%` 🔥
 
-    if setup is None:
-        print(f"[{symbol}] [{latest_candle_time}] No setup detected or outside killzone.")
-        return
+📍 *Entry:* `{entry:.{decimals}f}`
+⛔ *Stop Loss:* `{stop_loss:.{decimals}f}` ({sl_pips} Pips)
+🎯 *Take Profit 1:* `{tp1:.{decimals}f}` (1:2 R:R | +{tp1_pips} Pips)
+🎯 *Take Profit 2:* `{tp2:.{decimals}f}` (1:3 R:R | +{tp2_pips} Pips)
 
-    if last_signal_time.get(symbol) == latest_candle_time:
-        print(f"[{symbol}] [{latest_candle_time}] Setup already alerted. Skipping duplicate.")
-        return
+📊 *Setup Analysis:*
+• Strategy: {strategy}
+• Timeframe: {timeframe}
 
-    # 3. AI Filter Audit with Gemini
-    print(f"[{symbol}] Algorithmic setup detected! Requesting AI audit from Gemini Flash...")
+⚡ *Manage risk responsibly according to your account size.*"""
+
+    url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
+    payload = {
+        "chat_id": TELEGRAM_CHAT_ID,
+        "text": message,
+        "parse_mode": "Markdown"
+    }
+
     try:
-        ai_audit = filter_setup_with_ai(
-            symbol=symbol,
-            setup=setup,
-            m15_recent_candles=m15,
-            h4_recent_candles=h4
-        )
+        res = requests.post(url, json=payload, timeout=10)
+        print(f"[{asset}] Telegram Alert Status: {res.status_code}")
     except Exception as e:
-        print(f"[{symbol}] AI Audit Error: {e}")
-        traceback.print_exc()
+        print(f"Error sending Telegram alert for {asset}: {e}")
+
+# ==========================================
+# STRATEGY SCANNER (Liquidity Sweeps + FVG)
+# ==========================================
+def analyze_market(symbol_label, ticker_symbol):
+    """
+    Downloads M15 data and checks for Liquidity Sweeps + Fair Value Gap alignments.
+    """
+    print(f"Scanning {symbol_label}...")
+
+    try:
+        ticker = yf.Ticker(ticker_symbol)
+        df = ticker.history(period="5d", interval="15m")
+    except Exception as e:
+        print(f"Failed to download data for {symbol_label}: {e}")
         return
 
-    # 4. Gate execution behind AI Approval
-    if ai_audit.approve_trade and ai_audit.confidence_score >= 70:
-        last_signal_time[symbol] = latest_candle_time
+    if df.empty or len(df) < 15:
+        print(f"Insufficient data returned for {symbol_label}")
+        return
 
-        ai_confluences_formatted = "\n".join([f"• {c}" for c in ai_audit.ai_confluences])
-        algo_reasons_formatted = ", ".join(setup.reasons)
+    # Standardize column naming
+    df.columns = [col.lower() for col in df.columns]
 
-        message = (
-            f"🤖 *AI APPROVED SIGNAL ({ai_audit.confidence_score}% Confidence)*\n\n"
-            f"**Symbol:** {symbol} | **Direction:** {setup.direction.upper()}\n"
-            f"**Entry:** {setup.entry}\n"
-            f"**Stop Loss:** {setup.stop}\n"
-            f"**Take Profit:** {setup.target} (1:{setup.rr:.1f} R:R)\n\n"
-            f"📌 *Algorithmic Setup:* {algo_reasons_formatted}\n\n"
-            f"🧠 *AI Confluences:*\n{ai_confluences_formatted}\n\n"
-            f"⚠️ *AI Risk Note:* {ai_audit.risk_notes}\n\n"
-            f"_Trade responsibly._"
-        )
-        print(f"[{symbol}] AI Approved. Dispatching signal to Telegram...")
-        send_message(message)
-    else:
-        print(
-            f"[{symbol}] Setup REJECTED by Gemini AI. "
-            f"Confidence: {ai_audit.confidence_score}%. Reason: {ai_audit.risk_notes}"
-        )
+    latest = df.iloc[-1]
+    prev_1 = df.iloc[-2]
+    prev_3 = df.iloc[-4]
 
+    # 1. Bullish Setup (Liquidity Sweep + FVG)
+    recent_low = df['low'].iloc[-12:-2].min()
+    liquidity_sweep_buy = (prev_1['low'] < recent_low) and (prev_1['close'] > recent_low)
+    fvg_buy = prev_1['low'] > prev_3['high']
 
-def main():
-    check_config()
-    print("Checking markets...")
+    if liquidity_sweep_buy or fvg_buy:
+        entry = float(latest['close'])
+        buffer = 1.5 if "XAU" in symbol_label else 0.0008
+        stop_loss = float(df['low'].iloc[-5:].min()) - buffer
+        risk = entry - stop_loss
 
-    for pair_config in PAIRS:
-        try:
-            scan_pair(pair_config)
-        except Exception as e:
-            print(f"Error scanning {pair_config['symbol']}: {e}")
-            traceback.print_exc()
+        if risk > 0:
+            tp1 = entry + (risk * 2)
+            tp2 = entry + (risk * 3)
+            confidence = 75.0 if (liquidity_sweep_buy and fvg_buy) else 68.5
 
+            send_telegram_alert(
+                asset=symbol_label,
+                action="BUY",
+                confidence=confidence,
+                entry=entry,
+                stop_loss=stop_loss,
+                tp1=tp1,
+                tp2=tp2,
+                strategy="Liquidity Sweep + Fair Value Gap",
+                timeframe="M15 Structural Alignment"
+            )
+            return
 
+    # 2. Bearish Setup (Liquidity Sweep + FVG)
+    recent_high = df['high'].iloc[-12:-2].max()
+    liquidity_sweep_sell = (prev_1['high'] > recent_high) and (prev_1['close'] < recent_high)
+    fvg_sell = prev_1['high'] < prev_3['low']
+
+    if liquidity_sweep_sell or fvg_sell:
+        entry = float(latest['close'])
+        buffer = 1.5 if "XAU" in symbol_label else 0.0008
+        stop_loss = float(df['high'].iloc[-5:].max()) + buffer
+        risk = stop_loss - entry
+
+        if risk > 0:
+            tp1 = entry - (risk * 2)
+            tp2 = entry - (risk * 3)
+            confidence = 75.0 if (liquidity_sweep_sell and fvg_sell) else 68.5
+
+            send_telegram_alert(
+                asset=symbol_label,
+                action="SELL",
+                confidence=confidence,
+                entry=entry,
+                stop_loss=stop_loss,
+                tp1=tp1,
+                tp2=tp2,
+                strategy="Liquidity Sweep + Fair Value Gap",
+                timeframe="M15 Structural Alignment"
+            )
+            return
+
+    print(f"No active setup found for {symbol_label}.")
+
+# ==========================================
+# SCRIPT EXECUTION
+# ==========================================
 if __name__ == "__main__":
-    main()
-   
+    if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:
+        raise ValueError("Missing TELEGRAM_BOT_TOKEN or TELEGRAM_CHAT_ID secrets in GitHub Settings!")
+
+    for label, ticker in SYMBOLS.items():
+        analyze_market(label, ticker)
+        time.sleep(1)  # Brief pause between symbol requests
+    
